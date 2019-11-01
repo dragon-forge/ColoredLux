@@ -1,0 +1,106 @@
+package com.zeitheron.lux.api.event;
+
+import java.util.ArrayList;
+import java.util.stream.Stream;
+
+import com.google.common.collect.ImmutableList;
+import com.zeitheron.hammercore.api.lighting.ColoredLight;
+import com.zeitheron.lux.api.light.Light;
+
+import net.minecraft.client.renderer.culling.ICamera;
+import net.minecraft.util.math.AxisAlignedBB;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
+import net.minecraftforge.fml.common.eventhandler.Event;
+
+public class GatherLightsEvent extends Event
+{
+	private final ArrayList<ColoredLight> lights;
+	private final float maxDistance;
+	private final Vec3d cameraPosition;
+	private final ICamera camera;
+	private final float partialTicks;
+	
+	public GatherLightsEvent(ArrayList<ColoredLight> lights, float maxDistance, Vec3d cameraPosition, ICamera camera, float partialTicks)
+	{
+		this.lights = lights;
+		this.maxDistance = maxDistance;
+		this.cameraPosition = cameraPosition;
+		this.camera = camera;
+		this.partialTicks = partialTicks;
+	}
+	
+	public float getPartialTicks()
+	{
+		return partialTicks;
+	}
+	
+	public ImmutableList<ColoredLight> getLightList()
+	{
+		return ImmutableList.copyOf(lights);
+	}
+	
+	public float getMaxDistance()
+	{
+		return maxDistance;
+	}
+	
+	public Vec3d getCameraPosition()
+	{
+		return cameraPosition;
+	}
+	
+	public ICamera getCamera()
+	{
+		return camera;
+	}
+	
+	public void addAll(Stream<Light> lights)
+	{
+		lights.forEach(this::add);
+	}
+	
+	public void addAll(Iterable<Light> lights)
+	{
+		lights.forEach(this::add);
+	}
+	
+	public void add(Light.Builder light)
+	{
+		if(light != null)
+			add(light.build());
+	}
+	
+	public void add(ColoredLight light)
+	{
+		if(light == null)
+			return;
+		if(light.a <= 0F)
+			return;
+		float radius = light.radius;
+		if(cameraPosition != null)
+		{
+			double dist = MathHelper.sqrt(cameraPosition.squareDistanceTo(light.x, light.y, light.z));
+			if(dist > radius + maxDistance)
+				return;
+		}
+		if(camera != null && !camera.isBoundingBoxInFrustum(new AxisAlignedBB(light.x - radius, light.y - radius, light.z - radius, light.x + radius, light.y + radius, light.z + radius)))
+			return;
+		lights.add(light);
+	}
+	
+	public void add(Light light)
+	{
+		if(light == null)
+			return;
+		if(light.a <= 0F)
+			return;
+		add(light.getWrapper());
+	}
+	
+	@Override
+	public boolean isCancelable()
+	{
+		return false;
+	}
+}

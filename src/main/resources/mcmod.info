@@ -1,0 +1,10 @@
+[
+	{
+	  "modid": "lux",
+	  "name": "Colored Lux",
+	  "description": "Yet another colored lighting mod. Because Albedo doesn't do the trick.",
+	  "version": "${version}",
+	  "mcversion": "${mcversion}",
+	  "authorList": ["Zeitheron"]
+	}
+]

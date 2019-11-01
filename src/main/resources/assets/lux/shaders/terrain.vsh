@@ -1,0 +1,72 @@
+#version 430 compatibility
+
+out vec3 position;
+out vec4 lcolor;
+out float intens;
+
+struct Light
+{
+	vec4 color;
+	vec3 position;
+	float radius;
+};
+
+uniform int chunkX;
+uniform int chunkY;
+uniform int chunkZ;
+uniform Light lights[%LIGHTS%];
+uniform int lightCount;
+
+/*
+layout(std140) uniform LightBlock
+{
+    Light lights[%LIGHTS%];
+};
+*/
+
+float distSq(vec3 a, vec3 b)
+{
+	return pow(a.x - b.x, 2) + pow(a.y - b.y, 2) + pow(a.z - b.z, 2);
+}
+
+void main()
+{
+	vec4 pos = gl_ModelViewProjectionMatrix * gl_Vertex;
+	position = gl_Vertex.xyz + vec3(chunkX, chunkY, chunkZ);
+	gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;
+	gl_TexCoord[1] = gl_TextureMatrix[1] * gl_MultiTexCoord1;
+	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+	gl_FrontColor = gl_Color;
+	lcolor = vec4(0, 0, 0, 1.0f);
+	float sumR = 0;
+	float sumG = 0;
+	float sumB = 0;
+	float count = 0;
+	float maxIntens = 0;
+	float totalIntens = 0;
+	for(int i = 0; i < lightCount; i++)
+	{
+		float radius = pow(lights[i].radius, 2);
+		float dist = distSq(lights[i].position, position);
+		if(dist <= radius)
+		{
+            float intensity = pow(max(0, 1.0f - distance(lights[i].position, position) / lights[i].radius), 2);
+			totalIntens += intensity;
+			maxIntens = max(maxIntens, intensity);
+		}
+	}
+	for(int i = 0; i < lightCount; i++)
+	{
+        float radius = pow(lights[i].radius, 2);
+        float dist = distSq(lights[i].position, position);
+		if(dist <= radius)
+		{
+            float intensity = pow(max(0, 1.0f - distance(lights[i].position, position) / lights[i].radius), 2);
+			sumR += lights[i].color.r * (intensity / totalIntens);
+			sumG += lights[i].color.g * (intensity / totalIntens);
+			sumB += lights[i].color.b * (intensity / totalIntens);
+		}
+	}
+	lcolor = vec4(max(sumR * 1.5f, 0.0f), max(sumG * 1.5f, 0.0f), max(sumB * 1.5f, 0.0f), 1.0f);
+	intens = min(1.0f, maxIntens);
+}

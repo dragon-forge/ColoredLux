@@ -1,0 +1,3 @@
+
+options.lux:lighting=Colored Lighting
+options.lux:lighting.desc=This option enables colored lighting.{OF}<br>§2Warning: OptiFine detected! Colored lighting probably won't work.{/}<br><br>§4This option has very high performance impact.<br>§2Performance heavily depends on your GPU.<br><br>§9Recommended GPUs: <br>§anVidia: GTX 650+<br>§cAMD: R7 250+<br>§bIntel: No discrete GPU recommended yet.
