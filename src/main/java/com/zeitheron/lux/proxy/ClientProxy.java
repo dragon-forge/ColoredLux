@@ -9,16 +9,15 @@ import java.awt.font.FontRenderContext;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.ConcurrentModificationException;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
+import com.google.common.base.Joiner;
+import com.zeitheron.hammercore.lib.zlib.json.JSONObject;
+import com.zeitheron.hammercore.utils.JSONObjectToNBT;
+import net.minecraft.client.gui.*;
+import net.minecraft.util.math.RayTraceResult;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
 
@@ -51,12 +50,7 @@ import com.zeitheron.lux.client.json.JsonEntityLights;
 
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiOptionButton;
-import net.minecraft.client.gui.GuiOptionsRowList;
 import net.minecraft.client.gui.GuiOptionsRowList.Row;
-import net.minecraft.client.gui.GuiVideoSettings;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.culling.ICamera;
@@ -105,21 +99,23 @@ import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import net.minecraftforge.server.command.CommandTreeBase;
 
-public class ClientProxy extends CommonProxy implements ISelectiveResourceReloadListener
+public class ClientProxy
+		extends CommonProxy
+		implements ISelectiveResourceReloadListener
 {
 	public static final Map<BlockPos, LightBlockWrapper> EXISTING = Collections.synchronizedMap(new HashMap<>());
 	public static final Map<Integer, LightEntityWrapper> EXISTING_ENTS = Collections.synchronizedMap(new HashMap<>());
-	
+
 	private static int ticks;
 	public static SmartShaderProgram terrainProgram;
 	public static SmartShaderProgram entityProgram;
 	public static boolean isGui = false;
-	
+
 	boolean postedLights = false;
 	boolean precedesEntities = true;
 	String section = "";
 	Thread thread;
-	
+
 	private static int maxSessionLights = 1;
 	public static final SmartVariable LIGHT_COUNT = new SmartVariable("LIGHTS", () ->
 	{
@@ -130,10 +126,10 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			maxSessionLights = Math.max(maxSessionLights, Math.min(ConfigCL.maxLights, 2 * cl));
 		return Integer.toString(maxSessionLights);
 	});
-	
+
 	public static final List<Options> customOptions = new ArrayList<>();
 	public static final Options LUX_ENABLE_LIGHTING = EnumHelperClient.addOptions("LUX_ENABLE_LIGHTING", "options.lux:lighting", false, true);
-	
+
 	@Override
 	public void preInit(FMLPreInitializationEvent e)
 	{
@@ -142,7 +138,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 		RenderTileEntityEvent.enable();
 		PreRenderChunkEvent.enable();
 		MinecraftForge.EVENT_BUS.register(this);
-		
+
 		customOptions.add(LUX_ENABLE_LIGHTING);
 		for(Field f : GuiVideoSettings.class.getDeclaredFields())
 			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers()))
@@ -159,27 +155,27 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 					e1.printStackTrace();
 				}
 			}
-		
+
 		File cfg = e.getSuggestedConfigurationFile();
 		cfg = new File(cfg.getAbsolutePath().substring(0, cfg.getAbsolutePath().lastIndexOf(".")));
 		if(!cfg.isDirectory())
 			cfg.mkdirs();
-		
+
 		File old = new File(cfg, "lights.json");
 		if(old.isFile())
 			old.renameTo(new File(cfg, "lights-block.json"));
 		JsonBlockLights.setup(new File(cfg, "lights-block.json"));
 		JsonEntityLights.setup(new File(cfg, "lights-entity.json"));
-		
+
 		ColoredLightManager.registerOperator(() -> ConfigCL.enableColoredLighting, () ->
 		{
 			if(ConfigCL.enableColoredLighting)
 			{
 				glUniform1i(GlShaderStack.glsGetActiveUniformLoc("lightCount"), lights.size());
 				glUniform1i(GlShaderStack.glsGetActiveUniformLoc("colMix"), 0);
-				
+
 				int ll = Math.min(ConfigCL.maxLights, lights.size());
-				
+
 				for(int i = 0; i < ll; i++)
 				{
 					if(i < lights.size())
@@ -190,7 +186,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 						glUniform1f(GlShaderStack.glsGetActiveUniformLoc("lights[" + i + "].radius"), l.radius);
 					}
 				}
-				
+
 				return true;
 			}
 			return false;
@@ -211,7 +207,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			}
 			return false;
 		});
-		
+
 		ClientCommandHandler.instance.registerCommand(new CommandTreeBase()
 		{
 			{
@@ -222,13 +218,13 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 					{
 						return "lux reload";
 					}
-					
+
 					@Override
 					public String getName()
 					{
 						return "reload";
 					}
-					
+
 					@Override
 					public void execute(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException
 					{
@@ -244,26 +240,58 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 						sender.sendMessage(new TextComponentString(TextFormatting.GREEN + "Lux reloaded!"));
 					}
 				});
+
+				addSubcommand(new CommandBase()
+				{
+					@Override
+					public String getUsage(ICommandSender sender)
+					{
+						return "lux pickstate";
+					}
+
+					@Override
+					public String getName()
+					{
+						return "pickstate";
+					}
+
+					@Override
+					public void execute(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException
+					{
+						RayTraceResult obj = Minecraft.getMinecraft().objectMouseOver;
+						if(obj != null && obj.typeOfHit == RayTraceResult.Type.BLOCK)
+						{
+							BlockPos pos = obj.getBlockPos();
+							World wld = Minecraft.getMinecraft().world;
+							IBlockState state = wld.getBlockState(pos).getActualState(wld, pos);
+							StringBuilder bld = new StringBuilder();
+							bld.append("\"state\": { ").append(Joiner.on(", ").join(state.getProperties().entrySet().stream().map(entry -> JSONObject.quote(entry.getKey().getName()) + ": " + JSONObject.quote(Objects.toString(entry.getValue()))).collect(Collectors.toList()))).append(" }");
+							sender.sendMessage(new TextComponentString(bld.toString()));
+							GuiScreen.setClipboardString(bld.toString());
+							sender.sendMessage(new TextComponentString(TextFormatting.GREEN + "Copied to clipboard!"));
+						}
+					}
+				});
 			}
-			
+
 			@Override
 			public String getUsage(ICommandSender sender)
 			{
 				return "/lux";
 			}
-			
+
 			@Override
 			public String getName()
 			{
 				return "lux";
 			}
-			
+
 			@Override
 			public boolean checkPermission(MinecraftServer server, ICommandSender sender)
 			{
 				return true;
 			}
-			
+
 			@Override
 			public int getRequiredPermissionLevel()
 			{
@@ -271,9 +299,9 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			}
 		});
 	}
-	
+
 	public static final List<ColoredLight> lights = new ArrayList<>();
-	
+
 	@SubscribeEvent
 	@SideOnly(Side.CLIENT)
 	public void lightUpload(LightUniformEvent e)
@@ -282,11 +310,11 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 		lights.addAll(ClientLightManager.lights);
 		ColoredLightManager.LAST_LIGHTS = lights.size();
 	}
-	
+
 	Field buttonA, buttonB;
-	
+
 	public List<String> toDrawTooltip;
-	
+
 	@SubscribeEvent
 	@SideOnly(Side.CLIENT)
 	public void initGui(InitGuiEvent.Post e)
@@ -298,7 +326,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			for(int i = 0; i < options.options.size(); ++i)
 			{
 				Row prev = options.options.get(i);
-				
+
 				if(buttonA == null && prev.buttonA != null && prev.buttonA != prev.buttonB)
 				{
 					for(Field f : Row.class.getDeclaredFields())
@@ -315,7 +343,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 							}
 						}
 				}
-				
+
 				if(buttonB == null && prev.buttonB != null && prev.buttonA != prev.buttonB)
 				{
 					for(Field f : Row.class.getDeclaredFields())
@@ -332,7 +360,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 							}
 						}
 				}
-				
+
 				if(buttonB != null && prev.buttonB instanceof GuiOptionButton && customOptions.contains(((GuiOptionButton) prev.buttonB).getOption()))
 				{
 					try
@@ -349,7 +377,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 						e1.printStackTrace();
 					}
 				}
-				
+
 				if(buttonA != null && prev.buttonA instanceof GuiOptionButton && customOptions.contains(((GuiOptionButton) prev.buttonA).getOption()))
 				{
 					try
@@ -369,13 +397,13 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			}
 		}
 	}
-	
+
 	private GuiOptionButton convert(GuiOptionButton btn)
 	{
 		return new GuiOptionButton(btn.id, btn.x, btn.y, btn.getOption(), btn.displayString)
 		{
 			Long hoverTime;
-			
+
 			@Override
 			public void drawButton(Minecraft mc, int mouseX, int mouseY, float partialTicks)
 			{
@@ -396,7 +424,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 				} else
 					hoverTime = null;
 			}
-			
+
 			@Override
 			public boolean mousePressed(Minecraft mc, int mouseX, int mouseY)
 			{
@@ -407,7 +435,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			}
 		};
 	}
-	
+
 	@SubscribeEvent
 	@SideOnly(Side.CLIENT)
 	public void renderGui(DrawScreenEvent.Post e)
@@ -427,9 +455,9 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			toDrawTooltip = null;
 		}
 	}
-	
+
 	public static boolean OptifineInstalled = false;
-	
+
 	static
 	{
 		try
@@ -440,7 +468,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 		{
 		}
 	}
-	
+
 	public void describe(Options opt, List<String> desc)
 	{
 		if(opt == LUX_ENABLE_LIGHTING)
@@ -459,15 +487,15 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			desc.addAll(Arrays.asList(str.split("<br>")));
 		}
 	}
-	
+
 	public boolean getState(Options opt)
 	{
 		if(opt == LUX_ENABLE_LIGHTING)
 			return ConfigCL.enableColoredLighting;
-		
+
 		return false;
 	}
-	
+
 	public void toggle(Options opt)
 	{
 		if(opt == LUX_ENABLE_LIGHTING)
@@ -477,7 +505,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			ConfigCL.cfgs.save();
 		}
 	}
-	
+
 	public void startThread()
 	{
 		thread = new Thread(() ->
@@ -487,7 +515,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 		});
 		thread.start();
 	}
-	
+
 	private static void searchLoop()
 	{
 		if(Minecraft.getMinecraft().player != null)
@@ -502,16 +530,12 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 					int r = maxDistance / 2;
 					for(BlockPos.MutableBlockPos pos : BlockPos.getAllInBoxMutable(playerPos.add(-r, -r, -r), playerPos.add(r, r, r)))
 					{
-						Vec3d cameraPosition = ClientLightManager.cameraPos;
-						ICamera camera = ClientLightManager.camera;
 						IBlockState state = reader.getBlockState(pos);
-						ArrayList<ColoredLight> lights = new ArrayList<>();
-						GatherLightsEvent lightsEvent = new GatherLightsEvent(lights, maxDistance, cameraPosition, camera, Minecraft.getMinecraft().getRenderPartialTicks());
 						ILightBlockHandler handler = LuxManager.BLOCK_LUMINANCES.get(state.getBlock());
 						if(handler != null)
 						{
 							BlockPos ipos = pos.toImmutable();
-							EXISTING.put(ipos, new LightBlockWrapper(reader, ipos, state, handler));
+							EXISTING.put(ipos, new LightBlockWrapper(reader, ipos, state.getBlock().getExtendedState(state, reader, pos), handler));
 						} else
 							EXISTING.remove(pos);
 					}
@@ -541,34 +565,32 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			{
 			}
 	}
-	
-	private static final ThreadLocal<List<ColoredLight>> cls = ThreadLocal.withInitial(ArrayList::new);
-	
+
 	@Override
 	public void postInit()
 	{
 		((IReloadableResourceManager) Minecraft.getMinecraft().getResourceManager()).registerReloadListener(this);
 		JsonBlockLights.reload();
 		ForgeRegistries.BLOCKS.getValuesCollection().stream() //
-		        .filter(Predicates.instanceOf(IGlowingBlock.class)) //
-		        .forEach(blk ->
-		        {
-			        IGlowingBlock glow = (IGlowingBlock) blk;
-			        LuxManager.registerBlockLight(blk, (world, pos, state, event) -> event.add(glow.produceColoredLight(world, pos, state, 1F)));
-		        });
+				.filter(Predicates.instanceOf(IGlowingBlock.class)) //
+				.forEach(blk ->
+				{
+					IGlowingBlock glow = (IGlowingBlock) blk;
+					LuxManager.registerBlockLight(blk, (world, pos, state, event) -> event.add(glow.produceColoredLight(world, pos, state, 1F)));
+				});
 	}
-	
+
 	@Override
 	public void onResourceManagerReload(IResourceManager resourceManager, Predicate<IResourceType> resourcePredicate)
 	{
 		if(resourcePredicate.test(VanillaResourceType.SHADERS))
 		{
 			terrainProgram = new SmartShaderProgram(new ResourceLocation("lux", "terrain"), resourceManager, new SmartShaderVariables(LIGHT_COUNT));
-			
+
 			entityProgram = new SmartShaderProgram(new ResourceLocation("lux", "entities"), resourceManager, new SmartShaderVariables(LIGHT_COUNT));
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void onProfilerChange(ProfilerEndStartEvent event)
 	{
@@ -579,16 +601,16 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			{
 				float pt = Minecraft.getMinecraft().getRenderPartialTicks();
 				EntityPlayer player = Minecraft.getMinecraft().player;
-				
+
 				float playerX = 0, playerY = 0, playerZ = 0;
-				
+
 				if(player != null)
 				{
 					playerX = (float) (player.prevPosX + (player.posX - player.prevPosX) * pt);
 					playerY = (float) (player.prevPosZ + (player.posY - player.prevPosY) * pt);
 					playerZ = (float) (player.prevPosZ + (player.posZ - player.prevPosZ) * pt);
 				}
-				
+
 				isGui = false;
 				precedesEntities = true;
 				terrainProgram.useShader();
@@ -610,9 +632,9 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 					entityProgram.setUniform("sampler", 0);
 					entityProgram.setUniform("lightmap", 1);
 					ClientLightManager.uploadLights();
-					
+
 					entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
-					
+
 					entityProgram.setUniform("lightingEnabled", GL11.glIsEnabled(GL11.GL_LIGHTING));
 					terrainProgram.useShader();
 					postedLights = true;
@@ -696,7 +718,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			}
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void clientTick(ClientTickEvent e)
 	{
@@ -708,7 +730,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 				wc.eventListeners.add(INSTANCE);
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void renderEntity(RenderEntityEvent e)
 	{
@@ -731,7 +753,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			}
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void renderTileEntity(RenderTileEntityEvent e)
 	{
@@ -748,7 +770,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			}
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void preRenderChunk(PreRenderChunkEvent e)
 	{
@@ -760,7 +782,7 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			terrainProgram.setUniform("chunkZ", pos.getZ());
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void renderLast(RenderWorldLastEvent e)
 	{
@@ -771,16 +793,16 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			SmartShaderProgram.stopShader();
 		}
 	}
-	
+
 	public static boolean renderF3;
-	
+
 	@SubscribeEvent(priority = EventPriority.HIGHEST)
 	public void addF3Info(RenderGameOverlayEvent.Pre event)
 	{
 		if(event.getType() == ElementType.DEBUG)
 			renderF3 = true;
 	}
-	
+
 	@SubscribeEvent(priority = EventPriority.HIGHEST)
 	public void addF3Info(RenderGameOverlayEvent.Text f3)
 	{
@@ -795,10 +817,11 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			renderF3 = false;
 		}
 	}
-	
+
 	public static final BUD INSTANCE = new BUD();
-	
-	public static class BUD implements IWorldEventListener
+
+	public static class BUD
+			implements IWorldEventListener
 	{
 		@Override
 		public void notifyBlockUpdate(World worldIn, BlockPos pos, IBlockState oldState, IBlockState newState, int flags)
@@ -817,57 +840,57 @@ public class ClientProxy extends CommonProxy implements ISelectiveResourceReload
 			} else
 				EXISTING.remove(pos);
 		}
-		
+
 		@Override
 		public void notifyLightSet(BlockPos pos)
 		{
 		}
-		
+
 		@Override
 		public void markBlockRangeForRenderUpdate(int x1, int y1, int z1, int x2, int y2, int z2)
 		{
 		}
-		
+
 		@Override
 		public void playSoundToAllNearExcept(EntityPlayer player, SoundEvent soundIn, SoundCategory category, double x, double y, double z, float volume, float pitch)
 		{
 		}
-		
+
 		@Override
 		public void playRecord(SoundEvent soundIn, BlockPos pos)
 		{
 		}
-		
+
 		@Override
 		public void spawnParticle(int particleID, boolean ignoreRange, double xCoord, double yCoord, double zCoord, double xSpeed, double ySpeed, double zSpeed, int... parameters)
 		{
 		}
-		
+
 		@Override
 		public void spawnParticle(int id, boolean ignoreRange, boolean minimiseParticleLevel, double x, double y, double z, double xSpeed, double ySpeed, double zSpeed, int... parameters)
 		{
 		}
-		
+
 		@Override
 		public void onEntityAdded(Entity entityIn)
 		{
 		}
-		
+
 		@Override
 		public void onEntityRemoved(Entity entityIn)
 		{
 		}
-		
+
 		@Override
 		public void broadcastSound(int soundID, BlockPos pos, int data)
 		{
 		}
-		
+
 		@Override
 		public void playEvent(EntityPlayer player, int type, BlockPos blockPosIn, int data)
 		{
 		}
-		
+
 		@Override
 		public void sendBlockBreakProgress(int breakerId, BlockPos pos, int progress)
 		{

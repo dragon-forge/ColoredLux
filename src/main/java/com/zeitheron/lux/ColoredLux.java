@@ -13,7 +13,7 @@ import net.minecraftforge.fml.common.event.FMLFingerprintViolationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 
-@Mod(modid = "lux", name = "Colored Lux", version = "@VERSION@", certificateFingerprint = "4d7b29cd19124e986da685107d16ce4b49bc0a97", updateJSON = "http://dccg.herokuapp.com/api/fmluc/347912", guiFactory = "com.zeitheron.lux.client.CLGuiFactory", dependencies = "required-after:hammercore")
+@Mod(modid = "lux", name = "Colored Lux", version = "@VERSION@", certificateFingerprint = "9f5e2a811a8332a842b34f6967b7db0ac4f24856", updateJSON = "http://dccg.herokuapp.com/api/fmluc/347912", guiFactory = "com.zeitheron.lux.client.CLGuiFactory", dependencies = "required-after:hammercore")
 public class ColoredLux
 {
 	public static final Logger LOG = LogManager.getLogger("ColoredLux");
@@ -26,10 +26,10 @@ public class ColoredLux
 	{
 		LOG.warn("*****************************");
 		LOG.warn("WARNING: Somebody has been tampering with ColoredLux jar!");
-		LOG.warn("It is highly recommended that you redownload mod from https://www.curseforge.com/projects/347912 !");
+		LOG.warn("It is highly recommended that you redownload mod from https://dccg.herokuapp.com/api/fmlhp/347912 !");
 		LOG.warn("*****************************");
 		HammerCore.invalidCertificate = true;
-		HammerCore.invalidCertificates.put("lux", "https://www.curseforge.com/projects/347912");
+		HammerCore.invalidCertificates.put("lux", "https://dccg.herokuapp.com/api/fmlhp/347912");
 	}
 	
 	@EventHandler
