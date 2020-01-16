@@ -1,26 +1,6 @@
 package com.zeitheron.lux.proxy;
 
-import static org.lwjgl.opengl.GL20.glUniform1f;
-import static org.lwjgl.opengl.GL20.glUniform1i;
-import static org.lwjgl.opengl.GL20.glUniform3f;
-import static org.lwjgl.opengl.GL20.glUniform4f;
-
-import java.awt.font.FontRenderContext;
-import java.io.File;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.*;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
 import com.google.common.base.Joiner;
-import com.zeitheron.hammercore.lib.zlib.json.JSONObject;
-import com.zeitheron.hammercore.utils.JSONObjectToNBT;
-import net.minecraft.client.gui.*;
-import net.minecraft.util.math.RayTraceResult;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL20;
-
 import com.google.common.base.Predicates;
 import com.zeitheron.hammercore.api.events.PreRenderChunkEvent;
 import com.zeitheron.hammercore.api.events.ProfilerEndStartEvent;
@@ -32,6 +12,7 @@ import com.zeitheron.hammercore.api.lighting.LightUniformEvent;
 import com.zeitheron.hammercore.api.lighting.impl.IGlowingBlock;
 import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.UtilsFX;
+import com.zeitheron.hammercore.lib.zlib.json.JSONObject;
 import com.zeitheron.hammercore.utils.ReflectionUtil;
 import com.zeitheron.lux.ConfigCL;
 import com.zeitheron.lux.api.LuxManager;
@@ -47,9 +28,9 @@ import com.zeitheron.lux.client.SmartShaderProgram.SmartShaderVariables;
 import com.zeitheron.lux.client.SmartShaderProgram.SmartVariable;
 import com.zeitheron.lux.client.json.JsonBlockLights;
 import com.zeitheron.lux.client.json.JsonEntityLights;
-
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.*;
 import net.minecraft.client.gui.GuiOptionsRowList.Row;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
@@ -70,6 +51,7 @@ import net.minecraft.util.SoundCategory;
 import net.minecraft.util.SoundEvent;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
@@ -98,6 +80,17 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import net.minecraftforge.server.command.CommandTreeBase;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL20;
+
+import java.io.File;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.*;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import static org.lwjgl.opengl.GL20.*;
 
 public class ClientProxy
 		extends CommonProxy
@@ -140,20 +133,32 @@ public class ClientProxy
 		MinecraftForge.EVENT_BUS.register(this);
 
 		customOptions.add(LUX_ENABLE_LIGHTING);
-		for(Field f : GuiVideoSettings.class.getDeclaredFields())
-			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers()))
+		if(OptifineInstalled) for(Field f : GuiPerformanceSettingsOF.getDeclaredFields())
+			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers())) try
 			{
 				f.setAccessible(true);
-				try
-				{
-					Options[] videoSettings = Options[].class.cast(f.get(null));
-					List<Options> got = new ArrayList<>(Arrays.asList(videoSettings));
-					customOptions.forEach(o -> got.add(got.indexOf(Options.USE_VBO), o));
+				Options[] videoSettings = Options[].class.cast(f.get(null));
+				List<Options> got = new ArrayList<>(Arrays.asList(videoSettings));
+				customOptions.forEach(o -> got.add(o));
+				if(Modifier.isFinal(f.getModifiers()))
 					ReflectionUtil.setStaticFinalField(f, got.toArray(new Options[got.size()]));
-				} catch(IllegalArgumentException | IllegalAccessException e1)
-				{
-					e1.printStackTrace();
-				}
+				else f.set(null, got.toArray(new Options[got.size()]));
+			} catch(IllegalArgumentException | IllegalAccessException e1)
+			{
+				e1.printStackTrace();
+			}
+			else ;
+		else for(Field f : GuiVideoSettings.class.getDeclaredFields())
+			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers())) try
+			{
+				f.setAccessible(true);
+				Options[] videoSettings = Options[].class.cast(f.get(null));
+				List<Options> got = new ArrayList<>(Arrays.asList(videoSettings));
+				customOptions.forEach(o -> got.add(got.indexOf(Options.USE_VBO), o));
+				ReflectionUtil.setStaticFinalField(f, got.toArray(new Options[got.size()]));
+			} catch(IllegalArgumentException | IllegalAccessException e1)
+			{
+				e1.printStackTrace();
 			}
 
 		File cfg = e.getSuggestedConfigurationFile();
@@ -319,9 +324,24 @@ public class ClientProxy
 	@SideOnly(Side.CLIENT)
 	public void initGui(InitGuiEvent.Post e)
 	{
-		if(e.getGui() instanceof GuiVideoSettings)
+		if(e.getGui() != null && GuiPerformanceSettingsOF != null && GuiPerformanceSettingsOF.isAssignableFrom(e.getGui().getClass()))
+		{
+			for(int i = 0; i < e.getButtonList().size(); ++i)
+			{
+				GuiButton btn = e.getButtonList().get(i);
+				if(btn instanceof GuiOptionButton)
+				{
+					GuiOptionButton opts = (GuiOptionButton) btn;
+					if(customOptions.contains(opts.getOption()))
+						e.getButtonList().set(i, convert((GuiOptionButton) btn));
+				}
+			}
+		}
+
+		if(e.getGui() instanceof GuiVideoSettings && !OptifineInstalled)
 		{
 			GuiVideoSettings settings = (GuiVideoSettings) e.getGui();
+
 			GuiOptionsRowList options = (GuiOptionsRowList) settings.optionsRowList;
 			for(int i = 0; i < options.options.size(); ++i)
 			{
@@ -457,12 +477,15 @@ public class ClientProxy
 	}
 
 	public static boolean OptifineInstalled = false;
+	public static Class GuiPerformanceSettingsOF, GuiButtonOF, GuiSliderOF;
 
 	static
 	{
 		try
 		{
-			Class.forName("optifine.OptiFineTweaker");
+			GuiPerformanceSettingsOF = Class.forName("net.optifine.gui.GuiPerformanceSettingsOF");
+			GuiButtonOF = Class.forName("net.optifine.gui.GuiOptionButtonOF");
+			GuiSliderOF = Class.forName("net.optifine.gui.GuiOptionSliderOF");
 			OptifineInstalled = true;
 		} catch(Throwable err)
 		{
@@ -748,7 +771,7 @@ public class ClientProxy
 				{
 					EntityLivingBase elb = (EntityLivingBase) e.getEntity();
 					if(elb.hurtTime > 0 || elb.deathTime > 0)
-						entityProgram.setUniform("colorMult", 1F, 0F, 0F, 0.7F);
+						entityProgram.setUniform("colorMult", 1F, 0F, 0F, 0.35F);
 				}
 			}
 		}
