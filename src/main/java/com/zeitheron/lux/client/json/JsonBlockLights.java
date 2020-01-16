@@ -1,20 +1,5 @@
 package com.zeitheron.lux.client.json;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Random;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
 import com.google.common.base.Predicates;
 import com.zeitheron.hammercore.lib.zlib.error.JSONException;
 import com.zeitheron.hammercore.lib.zlib.io.IOUtils;
@@ -28,7 +13,6 @@ import com.zeitheron.lux.api.LuxManager;
 import com.zeitheron.lux.api.event.GatherLightsEvent;
 import com.zeitheron.lux.api.light.ILightBlockHandler;
 import com.zeitheron.lux.api.light.Light;
-
 import it.unimi.dsi.fastutil.longs.Long2ObjectArrayMap;
 import net.minecraft.block.Block;
 import net.minecraft.block.properties.IProperty;
@@ -36,17 +20,26 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraftforge.common.property.IExtendedBlockState;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
-import scala.sys.process.ProcessBuilderImpl.FileInput;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.*;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public class JsonBlockLights
 {
 	static File file;
-	
+
 	public static void setup(File file)
 	{
 		JsonBlockLights.file = file;
-		
+
 		if(!file.isFile())
 		{
 			try(FileOutputStream fos = new FileOutputStream(file))
@@ -58,24 +51,24 @@ public class JsonBlockLights
 			}
 		}
 	}
-	
+
 	public static final Map<Block, ILightBlockHandler> handlers = new HashMap<>();
-	
+
 	public static void reload()
 	{
 		if(file == null)
 			return;
-		
+
 		if(!handlers.isEmpty())
 		{
 			handlers.keySet().forEach(LuxManager.BLOCK_LUMINANCES::remove);
 			handlers.clear();
 		}
-		
+
 		try(FileInputStream in = new FileInputStream(file))
 		{
 			JSONObject root = (JSONObject) new JSONTokener(new String(IOUtils.pipeOut(in))).nextValue();
-			
+
 			for(String key : root.keySet())
 			{
 				if(key.startsWith("#"))
@@ -99,56 +92,56 @@ public class JsonBlockLights
 		{
 			ioe.printStackTrace();
 		}
-		
+
 		handlers.forEach(LuxManager.BLOCK_LUMINANCES::put);
 	}
-	
+
 	public static class ParsedLight
 	{
 		public Predicate<IBlockState> states;
 		public Function<ExprFlicker, Float> red, green, blue, alpha, radius;
-		
+
 		public ParsedLight(JSONObject obj)
 		{
 			JSONObject color = obj.optJSONObject("color");
-			
+
 			String radius = obj.optString("radius");
 			if(radius == null)
 				this.radius = p -> 16F;
 			else
 				this.radius = p -> (float) ExpressionEvaluator.evaluateDouble(radius, p);
-			
+
 			if(color != null)
 			{
 				String rf = color.optString("red");
 				String gf = color.optString("green");
 				String bf = color.optString("blue");
 				String af = color.optString("alpha");
-				
+
 				if(rf == null || rf.isEmpty())
 					red = p -> 0F;
 				else
 					red = p -> (float) ExpressionEvaluator.evaluateDouble(rf, p);
-				
+
 				if(gf == null || gf.isEmpty())
 					green = p -> 0F;
 				else
 					green = p -> (float) ExpressionEvaluator.evaluateDouble(gf, p);
-				
+
 				if(bf == null || bf.isEmpty())
 					blue = p -> 0F;
 				else
 					blue = p -> (float) ExpressionEvaluator.evaluateDouble(bf, p);
-				
+
 				if(af == null || af.isEmpty())
 					alpha = p -> 1F;
 				else
 					alpha = p -> (float) ExpressionEvaluator.evaluateDouble(af, p);
 			} else
 				red = green = blue = alpha = p -> 1F;
-			
+
 			JSONObject state = obj.optJSONObject("state");
-			
+
 			if(state != null)
 			{
 				List<String> keys = new ArrayList<>(state.keySet());
@@ -158,24 +151,27 @@ public class JsonBlockLights
 				states = s ->
 				{
 					Map<String, String> kvs = new HashMap<>();
-					s.getProperties().entrySet().forEach(e -> kvs.put(e.getKey().getName(), ((IProperty) e.getKey()).getName(e.getValue())));
-					
+
+					s.getProperties().forEach((key, value1) -> kvs.put(key.getName(), ((IProperty) key).getName(value1)));
+					if(s instanceof IExtendedBlockState)
+						((IExtendedBlockState) s).getUnlistedProperties().forEach((key, value1) -> value1.ifPresent(trueValue -> kvs.put(key.getName(), value1.get().toString())));
+
 					for(int i = 0; i < keys.size(); ++i)
 					{
 						String p = keys.get(i);
 						String r = values.get(i);
-						
+
 						String val = kvs.getOrDefault(p, "undefined");
 						if(!Objects.equals(r, val))
 							return false;
 					}
-					
+
 					return true;
 				};
 			} else
 				states = Predicates.alwaysTrue();
 		}
-		
+
 		public Light.Builder build(BlockPos pos)
 		{
 			ExprFlicker flick = new ExprFlicker(pos);
@@ -192,25 +188,26 @@ public class JsonBlockLights
 			return null;
 		}
 	}
-	
-	public static class ExprFlicker extends ExpressionFunction
+
+	public static class ExprFlicker
+			extends ExpressionFunction
 	{
 		BlockPos pos;
 		Random rand;
-		
+
 		public ExprFlicker(BlockPos pos)
 		{
 			super("flicker");
 			this.pos = pos;
 			this.rand = new Random(pos.toLong());
 		}
-		
+
 		@Override
 		public boolean accepts(String functionName, double x)
 		{
 			return super.accepts(functionName, x) || functionName.compareToIgnoreCase("rng") == 0;
 		}
-		
+
 		@Override
 		public double apply(String functionName, double x)
 		{
@@ -221,25 +218,26 @@ public class JsonBlockLights
 			return x;
 		}
 	}
-	
-	public static class PresetLightBlockHandler implements ILightBlockHandler
+
+	public static class PresetLightBlockHandler
+			implements ILightBlockHandler
 	{
 		public final List<ParsedLight> lights;
-		
+
 		public PresetLightBlockHandler(List<ParsedLight> lights)
 		{
 			this.lights = lights;
 		}
-		
+
 		Long2ObjectArrayMap<List<Light.Builder>> builtLights = new Long2ObjectArrayMap<>();
 		Long2ObjectArrayMap<List<Light.Builder>> builtCache = new Long2ObjectArrayMap<>();
-		
+
 		@Override
 		public void update(IBlockState state, BlockPos pos)
 		{
 			List<Light.Builder> builtLights = this.builtLights.computeIfAbsent(pos.toLong(), l -> new ArrayList<>());
 			List<Light.Builder> builtCache = this.builtCache.computeIfAbsent(pos.toLong(), l -> new ArrayList<>());
-			
+
 			builtCache.clear();
 			final List<Light.Builder> ccache = builtCache;
 			lights.forEach(l ->
@@ -247,11 +245,11 @@ public class JsonBlockLights
 				if(l.states.test(state))
 					ccache.add(l.build(pos));
 			});
-			
+
 			this.builtLights.put(pos.toLong(), builtCache);
 			this.builtCache.put(pos.toLong(), builtLights);
 		}
-		
+
 		@Override
 		public void createLights(World world, BlockPos pos, IBlockState state, GatherLightsEvent e)
 		{

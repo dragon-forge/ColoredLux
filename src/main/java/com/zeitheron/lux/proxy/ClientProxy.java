@@ -2,6 +2,7 @@ package com.zeitheron.lux.proxy;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicates;
+import com.google.common.collect.ImmutableMap;
 import com.zeitheron.hammercore.api.events.PreRenderChunkEvent;
 import com.zeitheron.hammercore.api.events.ProfilerEndStartEvent;
 import com.zeitheron.hammercore.api.events.RenderEntityEvent;
@@ -70,6 +71,8 @@ import net.minecraftforge.client.resource.IResourceType;
 import net.minecraftforge.client.resource.ISelectiveResourceReloadListener;
 import net.minecraftforge.client.resource.VanillaResourceType;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.property.IExtendedBlockState;
+import net.minecraftforge.common.property.IUnlistedProperty;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -270,10 +273,18 @@ public class ClientProxy
 							BlockPos pos = obj.getBlockPos();
 							World wld = Minecraft.getMinecraft().world;
 							IBlockState state = wld.getBlockState(pos).getActualState(wld, pos);
-							StringBuilder bld = new StringBuilder();
-							bld.append("\"state\": { ").append(Joiner.on(", ").join(state.getProperties().entrySet().stream().map(entry -> JSONObject.quote(entry.getKey().getName()) + ": " + JSONObject.quote(Objects.toString(entry.getValue()))).collect(Collectors.toList()))).append(" }");
-							sender.sendMessage(new TextComponentString(bld.toString()));
-							GuiScreen.setClipboardString(bld.toString());
+							final StringBuilder sb = new StringBuilder().append("\"state\": { ").append(Joiner.on(", ").join(state.getProperties().entrySet().stream().map(entry -> JSONObject.quote(entry.getKey().getName()) + ": " + JSONObject.quote(Objects.toString(entry.getValue()))).collect(Collectors.toList())));
+							if(state instanceof IExtendedBlockState)
+							{
+								sb.append(", ");
+								final ImmutableMap<IUnlistedProperty<?>, Optional<?>> unlistedProperties = ((IExtendedBlockState) state).getUnlistedProperties();
+								List<String> bleh = new ArrayList<>();
+								unlistedProperties.forEach((key, value) -> value.ifPresent(trueValue -> bleh.add(JSONObject.quote(key.getName()) + ": " + JSONObject.quote(Objects.toString(trueValue)))));
+								sb.append(Joiner.on(", ").join(bleh));
+							}
+							sb.append(" }");
+							sender.sendMessage(new TextComponentString(sb.toString()));
+							GuiScreen.setClipboardString(sb.toString());
 							sender.sendMessage(new TextComponentString(TextFormatting.GREEN + "Copied to clipboard!"));
 						}
 					}

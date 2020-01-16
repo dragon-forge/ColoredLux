@@ -1,7 +1,7 @@
 #Project info
 author=Zeitheron
 start_git_commit=?
-git_commit=https://gitlab.com/Zeitheron/???/commit/{{hash}}
+git_commit=https://gitlab.com/DragonForge/colored-lux/commit/{{hash}}
 
 #Runtime info
 forge_version=14.23.5.2838
