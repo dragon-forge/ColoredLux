@@ -1,6 +1,10 @@
 #version 120
+
 varying float intens;
 varying vec4 lcolor;
+
+uniform vec3 worldTint;
+uniform float worldTintIntensity;
 
 uniform sampler2D sampler;
 uniform sampler2D lightmap;
@@ -21,7 +25,7 @@ float luma(vec3 color)
 
 void main()
 {
-	vec3 lightdark = texture2D(lightmap,gl_TexCoord[1].st).rgb;
+	vec3 lightdark = texture2D(lightmap, gl_TexCoord[1].st).rgb;
 	lightdark = clamp(lightdark, 0.0f, 1.0f);
 	vec3 lcolor_2 = clamp(lcolor.rgb * intens, 0.0f, 1.0f);
 	if(vanillaTracing == 1) lcolor_2 = lcolor_2 * pow(luma(lightdark), 2);
@@ -30,6 +34,8 @@ void main()
 	else lightdark = max(lightdark, lcolor_2); //Vivid but unrealistic
 	
 	vec4 baseColor = gl_Color * texture2D(sampler, gl_TexCoord[0].st);
+	baseColor = baseColor * vec4(mix(vec3(1), worldTint, worldTintIntensity), 1.0f);
+
 	baseColor = baseColor * vec4(lightdark, 1);
 	float dist = max(gl_FragCoord.z / gl_FragCoord.w - gl_Fog.start, 0.0f);
 	float fog = gl_Fog.density * dist * gl_Fog.density;

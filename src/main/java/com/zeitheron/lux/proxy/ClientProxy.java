@@ -9,6 +9,7 @@ import com.zeitheron.hammercore.api.events.RenderTileEntityEvent;
 import com.zeitheron.hammercore.api.lighting.ColoredLight;
 import com.zeitheron.hammercore.api.lighting.ColoredLightManager;
 import com.zeitheron.hammercore.api.lighting.LightUniformEvent;
+import com.zeitheron.hammercore.api.lighting.WorldTintHandler;
 import com.zeitheron.hammercore.api.lighting.impl.IGlowingBlock;
 import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.UtilsFX;
@@ -641,6 +642,12 @@ public class ClientProxy
 				terrainProgram.setUniform("sampler", 0);
 				terrainProgram.setUniform("lightmap", 1);
 				terrainProgram.setUniform("playerPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
+
+				float wtR = WorldTintHandler.tintRed, wtG = WorldTintHandler.tintGreen, wtB = WorldTintHandler.tintBlue, wtInt = WorldTintHandler.tintIntensity;
+
+				terrainProgram.setUniform("worldTint", wtR, wtG, wtB);
+				terrainProgram.setUniform("worldTintIntensity", wtInt);
+
 				if(!postedLights)
 				{
 					if(thread == null || !thread.isAlive())
@@ -657,6 +664,9 @@ public class ClientProxy
 					ClientLightManager.uploadLights();
 
 					entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
+
+					entityProgram.setUniform("worldTint", wtR, wtG, wtB);
+					entityProgram.setUniform("worldTintIntensity", wtInt);
 
 					entityProgram.setUniform("lightingEnabled", GL11.glIsEnabled(GL11.GL_LIGHTING));
 					terrainProgram.useShader();

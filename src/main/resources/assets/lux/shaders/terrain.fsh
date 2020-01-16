@@ -1,7 +1,11 @@
 #version 120
+
 varying vec3 position;
 varying vec4 lcolor;
 varying float intens;
+
+uniform vec3 worldTint;
+uniform float worldTintIntensity;
 
 uniform sampler2D sampler;
 uniform sampler2D lightmap;
@@ -31,6 +35,8 @@ void main()
 	else lightdark = max(lightdark, lcolor_2); //Vivid but unrealistic
 	
 	vec4 baseColor = gl_Color * texture2D(sampler, gl_TexCoord[0].st);
+	baseColor = baseColor * vec4(mix(vec3(1), worldTint, worldTintIntensity), 1.0f);
+
 	baseColor = baseColor * vec4(lightdark, 1);
 	vec3 dv = position - playerPos;
 	float dist = max(sqrt(dv.x * dv.x + dv.y * dv.y + dv.z * dv.z) - gl_Fog.start, 0.0f) / (gl_Fog.end - gl_Fog.start);
