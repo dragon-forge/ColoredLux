@@ -1,15 +1,5 @@
 package com.zeitheron.lux.client;
 
-import java.nio.FloatBuffer;
-import java.util.ArrayList;
-import java.util.Comparator;
-
-import org.lwjgl.BufferUtils;
-import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL30;
-import org.lwjgl.opengl.GL31;
-
 import com.zeitheron.hammercore.api.lighting.ColoredLight;
 import com.zeitheron.hammercore.api.lighting.ColoredLightManager;
 import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
@@ -19,7 +9,6 @@ import com.zeitheron.lux.api.light.ILightItem;
 import com.zeitheron.lux.api.light.ILightProvider;
 import com.zeitheron.lux.api.light.Light;
 import com.zeitheron.lux.proxy.ClientProxy;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.culling.ICamera;
@@ -34,6 +23,15 @@ import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL31;
+
+import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.Comparator;
 
 public class ClientLightManager
 {
@@ -42,20 +40,22 @@ public class ClientLightManager
 	public static ArrayList<ColoredLight> lights = new ArrayList<>();
 	public static int debugLights, debugCulledLights;
 	public static DistanceComparator distComparator = new DistanceComparator();
-	
+
 	public static void uploadLights()
 	{
+		int shader = GlShaderStack.glsActiveProgram();
+
 		int size = debugCulledLights = Math.min(ConfigCL.maxLights, lights.size());
-		GL20.glUniform1i(GlShaderStack.glsGetActiveUniformLoc("lightCount"), size);
-		GL20.glUniform1i(GlShaderStack.glsGetActiveUniformLoc("colMix"), ConfigCL.lightAddMode ? 1 : 0);
-		GL20.glUniform1i(GlShaderStack.glsGetActiveUniformLoc("vanillaTracing"), 0);
+		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "lightCount"), size);
+		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), ConfigCL.lightAddMode ? 1 : 0);
+		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "vanillaTracing"), 0);
 		debugLights = lights.size();
-		
-		int program = GlShaderStack.glsActiveProgram();
-		int uniformBlockLight = GL31.glGetUniformBlockIndex(program, "LightBlock");
+
+//		int program = GlShaderStack.glsActiveProgram();
+//		int uniformBlockLight = GL31.glGetUniformBlockIndex(program, "LightBlock");
 //		GL31.glUniformBlockBinding(program, uniformBlockLight, 0);
-		UBO();
-		
+//		UBO();
+
 		for(int i = 0; i < size; i++)
 		{
 			if(i < lights.size())
@@ -67,12 +67,12 @@ public class ClientLightManager
 			}
 		}
 	}
-	
+
 	private static Integer lightUBO;
-	
+
 	private static int uboSize;
 	private static FloatBuffer uboData;
-	
+
 	private static FloatBuffer updateUBO()
 	{
 		if(uboData == null || uboSize < lights.size())
@@ -87,41 +87,41 @@ public class ClientLightManager
 		uboData.flip();
 		return uboData;
 	}
-	
+
 	private static void createUBO()
 	{
 		if(lightUBO != null)
 			return;
-		
+
 		lightUBO = GL15.glGenBuffers();
-		
+
 		GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, lightUBO);
-		
+
 		GL15.glBufferData(GL31.GL_UNIFORM_BUFFER, updateUBO(), GL15.GL_STREAM_DRAW);
-		
+
 		GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, 0);
-		
+
 		GL30.glBindBufferRange(GL31.GL_UNIFORM_BUFFER, 0, lightUBO, 0, uboSize);
 	}
-	
+
 	private static void UBO()
 	{
 		createUBO();
 		GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, lightUBO);
 		GL15.glBufferData(GL31.GL_UNIFORM_BUFFER, updateUBO(), GL15.GL_STREAM_DRAW);
 	}
-	
+
 	private static Vec3d getCurrentPosition(Entity entity, float partialTicks)
 	{
 		return new Vec3d(entity.lastTickPosX + (entity.posX - entity.lastTickPosX) * partialTicks, entity.lastTickPosY + (entity.posY - entity.lastTickPosY) * partialTicks, entity.lastTickPosZ + (entity.posZ - entity.lastTickPosZ) * partialTicks);
 	}
-	
+
 	public static void update(World world)
 	{
 		Minecraft mc = Minecraft.getMinecraft();
 		Entity cameraEntity = mc.getRenderViewEntity();
 		float partialTicks = mc.getRenderPartialTicks();
-		
+
 		if(cameraEntity != null)
 		{
 			cameraPos = getCurrentPosition(cameraEntity, partialTicks);
@@ -134,15 +134,15 @@ public class ClientLightManager
 			camera = null;
 			return;
 		}
-		
+
 		GatherLightsEvent event = new GatherLightsEvent(lights, ConfigCL.maxDistance, cameraPos, camera, partialTicks);
 		ColoredLightManager.generate(partialTicks).forEach(event::add);
 		ClientProxy.EXISTING.values().forEach(m -> m.addLights(event));
 		ClientProxy.EXISTING_ENTS.values().forEach(m -> m.addLights(event));
 		MinecraftForge.EVENT_BUS.post(event);
-		
+
 		int maxDist = ConfigCL.maxDistance;
-		
+
 		for(Entity e : world.getEntitiesWithinAABB(Entity.class, new AxisAlignedBB(cameraPos.x - maxDist, cameraPos.y - maxDist, cameraPos.z - maxDist, cameraPos.x + maxDist, cameraPos.y + maxDist, cameraPos.z + maxDist)))
 		{
 			if(e.getPositionVector().distanceTo(cameraPos) >= maxDist)
@@ -166,7 +166,7 @@ public class ClientLightManager
 				}
 			}
 		}
-		
+
 		for(TileEntity t : world.loadedTileEntityList)
 		{
 			if(Math.sqrt(t.getPos().distanceSqToCenter(cameraPos.x, cameraPos.y, cameraPos.z)) >= ConfigCL.maxDistance)
@@ -175,11 +175,12 @@ public class ClientLightManager
 				if(t instanceof ILightProvider)
 					((ILightProvider) t).addLights(world, event);
 		}
-		
+
 		lights.sort(distComparator);
 	}
-	
-	public static class DistanceComparator implements Comparator<ColoredLight>
+
+	public static class DistanceComparator
+			implements Comparator<ColoredLight>
 	{
 		@Override
 		public int compare(ColoredLight a, ColoredLight b)
@@ -189,7 +190,7 @@ public class ClientLightManager
 			return Double.compare(dist1, dist2);
 		}
 	}
-	
+
 	public static void clear()
 	{
 		lights.clear();

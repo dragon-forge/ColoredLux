@@ -1,13 +1,13 @@
 #Project info
 author=Zeitheron
-start_git_commit=?
+start_git_commit=ac4e16d7d3fd5ae2f5f748416c3cf8cfc189371e
 git_commit=https://gitlab.com/DragonForge/colored-lux/commit/{{hash}}
 
 #Runtime info
 forge_version=14.23.5.2838
 minecraft_version=1.12.2
 mcp=stable_39
-hc_version=2.0.6.6
+hc_version=2.0.6.7
 jei_version=4.11.0.206
 
 #Mod info

@@ -82,6 +82,7 @@ public class SmartShaderProgram
 			if(vars.hasChanged())
 			{
 				GL20.glDeleteProgram(program);
+				uniformCache.clear();
 				program = programGenerator.getAsInt();
 			}
 

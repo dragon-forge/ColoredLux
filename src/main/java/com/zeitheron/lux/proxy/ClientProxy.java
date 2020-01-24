@@ -16,6 +16,7 @@ import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.UtilsFX;
 import com.zeitheron.hammercore.lib.zlib.json.JSONObject;
 import com.zeitheron.hammercore.utils.ReflectionUtil;
+import com.zeitheron.lux.ColoredLux;
 import com.zeitheron.lux.ConfigCL;
 import com.zeitheron.lux.api.LuxManager;
 import com.zeitheron.lux.api.event.CalculateFogIntensityEvent;
@@ -28,6 +29,7 @@ import com.zeitheron.lux.client.ClientLightManager;
 import com.zeitheron.lux.client.SmartShaderProgram;
 import com.zeitheron.lux.client.SmartShaderProgram.SmartShaderVariables;
 import com.zeitheron.lux.client.SmartShaderProgram.SmartVariable;
+import com.zeitheron.lux.client.ThreadTimer;
 import com.zeitheron.lux.client.json.JsonBlockLights;
 import com.zeitheron.lux.client.json.JsonEntityLights;
 import net.minecraft.block.state.IBlockState;
@@ -108,6 +110,9 @@ public class ClientProxy
 	public static SmartShaderProgram entityProgram;
 	public static boolean isGui = false;
 
+	static final int runtimeCores = Runtime.getRuntime().availableProcessors();
+	static final int lightTPSDivisor = runtimeCores <= 4 ? 8 : runtimeCores <= 8 ? 4 : 2;
+
 	boolean postedLights = false;
 	boolean precedesEntities = true;
 	String section = "";
@@ -135,6 +140,8 @@ public class ClientProxy
 		RenderTileEntityEvent.enable();
 		PreRenderChunkEvent.enable();
 		MinecraftForge.EVENT_BUS.register(this);
+
+		ColoredLux.LOG.info("Found " + runtimeCores + " available processing threads. The light update frequency will be max(FPS/" + lightTPSDivisor + ", 1) Hz");
 
 		customOptions.add(LUX_ENABLE_LIGHTING);
 		if(OptifineInstalled) for(Field f : GuiPerformanceSettingsOF.getDeclaredFields())
@@ -541,64 +548,91 @@ public class ClientProxy
 		}
 	}
 
+	public static ThreadTimer searchTimer = new ThreadTimer(60F);
+	public static long luxCalcTimeMS;
+
 	public void startThread()
 	{
+		// No need to start more threads
+		if(thread != null && thread.isAlive()) return;
+
 		thread = new Thread(() ->
 		{
 			while(!thread.isInterrupted())
-				searchLoop();
-		});
+			{
+				searchTimer.advanceTime();
+				if(searchTimer.ticks > 0) try
+				{
+					long start = System.nanoTime();
+					searchLoop();
+					luxCalcTimeMS = (System.nanoTime() - start) / 10000L;
+				} catch(Throwable error)
+				{
+					// Continue running
+				}
+				else try
+				{
+					Thread.sleep(1L);
+				} catch(InterruptedException e)
+				{
+					// Thread termination
+				}
+			}
+		}, "ColoredLuxLightSearch");
 		thread.start();
 	}
 
 	private static void searchLoop()
 	{
-		if(Minecraft.getMinecraft().player != null)
-			try
+		// DO NOT loop for blocks while lighting disabled.
+		if(!ConfigCL.enableColoredLighting)
+		{
+			EXISTING.clear();
+			EXISTING_ENTS.clear();
+			return;
+		}
+
+		if(Minecraft.getMinecraft().player == null) return;
+		EntityPlayer player = Minecraft.getMinecraft().player;
+		World reader;
+		if((reader = Minecraft.getMinecraft().world) != null)
+		{
+			BlockPos playerPos = player.getPosition();
+			int maxDistance = ConfigCL.maxDistance;
+			int r = maxDistance / 2;
+			for(BlockPos.MutableBlockPos pos : BlockPos.getAllInBoxMutable(playerPos.add(-r, -r, -r), playerPos.add(r, r, r)))
 			{
-				EntityPlayer player = Minecraft.getMinecraft().player;
-				World reader;
-				if((reader = Minecraft.getMinecraft().world) != null)
+				IBlockState state = reader.getBlockState(pos);
+				ILightBlockHandler handler = LuxManager.BLOCK_LUMINANCES.get(state.getBlock());
+				if(handler != null)
 				{
-					BlockPos playerPos = player.getPosition();
-					int maxDistance = ConfigCL.maxDistance;
-					int r = maxDistance / 2;
-					for(BlockPos.MutableBlockPos pos : BlockPos.getAllInBoxMutable(playerPos.add(-r, -r, -r), playerPos.add(r, r, r)))
-					{
-						IBlockState state = reader.getBlockState(pos);
-						ILightBlockHandler handler = LuxManager.BLOCK_LUMINANCES.get(state.getBlock());
-						if(handler != null)
-						{
-							BlockPos ipos = pos.toImmutable();
-							EXISTING.put(ipos, new LightBlockWrapper(reader, ipos, state.getBlock().getExtendedState(state, reader, pos), handler));
-						} else
-							EXISTING.remove(pos);
-					}
-					Iterator<Integer> iter = EXISTING_ENTS.keySet().iterator();
-					while(iter.hasNext())
-					{
-						Integer id = iter.next();
-						Entity ent = reader.getEntityByID(id);
-						if(ent == null || ent.isDead)
-						{
-							EXISTING_ENTS.get(id).remove(id);
-							iter.remove();
-						}
-					}
-					for(Entity ent : reader.getEntitiesWithinAABB(Entity.class, new AxisAlignedBB(playerPos).grow(r)))
-					{
-						EntityEntry ee = EntityRegistry.getEntry(ent.getClass());
-						if(ee != null)
-						{
-							ILightEntityHandler handler = LuxManager.ENTITY_LUMINANCES.get(ee);
-							if(handler != null)
-								EXISTING_ENTS.put(ent.getEntityId(), new LightEntityWrapper(ent, handler));
-						}
-					}
-				}
-			} catch(ConcurrentModificationException cme)
-			{
+					BlockPos ipos = pos.toImmutable();
+					EXISTING.put(ipos, new LightBlockWrapper(reader, ipos, state.getBlock().getExtendedState(state, reader, pos), handler));
+				} else
+					EXISTING.remove(pos);
 			}
+			Iterator<Integer> iter = EXISTING_ENTS.keySet().iterator();
+			while(iter.hasNext())
+			{
+				Integer id = iter.next();
+				Entity ent = reader.getEntityByID(id);
+				if(ent == null || ent.isDead)
+				{
+					EXISTING_ENTS.get(id).remove(id);
+					iter.remove();
+				}
+			}
+			for(Entity ent : reader.getEntitiesWithinAABB(Entity.class, new AxisAlignedBB(playerPos).grow(r)))
+			{
+				EntityEntry ee = EntityRegistry.getEntry(ent.getClass());
+				if(ee != null)
+				{
+					ILightEntityHandler handler = LuxManager.ENTITY_LUMINANCES.get(ee);
+					if(handler != null)
+						EXISTING_ENTS.put(ent.getEntityId(), new LightEntityWrapper(ent, handler));
+				}
+			}
+		}
 	}
 
 	@Override
@@ -772,6 +806,7 @@ public class ClientProxy
 			WorldClient wc = Minecraft.getMinecraft().world;
 			if(wc != null && !wc.eventListeners.contains(INSTANCE))
 				wc.eventListeners.add(INSTANCE);
+			searchTimer.setTPS(Math.max(Minecraft.getDebugFPS() / lightTPSDivisor, 1));
 		}
 	}
 
@@ -852,7 +887,7 @@ public class ClientProxy
 	{
 		if(renderF3)
 		{
-			String s = "[" + TextFormatting.GREEN + "Lux" + TextFormatting.RESET + "] " + (ConfigCL.enableColoredLighting ? ("L: " + ClientLightManager.debugCulledLights + "/" + ClientLightManager.debugLights + "|" + (GL11.glGetInteger(GL20.GL_MAX_VERTEX_UNIFORM_COMPONENTS) / 4 / (4 + 3 + 1))) : "Colored lighting " + TextFormatting.RED + "disabled" + TextFormatting.RESET + ".");
+			String s = "[" + TextFormatting.GREEN + "Lux" + TextFormatting.RESET + "] " + (ConfigCL.enableColoredLighting ? ("L: " + ClientLightManager.debugCulledLights + "/" + ClientLightManager.debugLights + "|" + (GL11.glGetInteger(GL20.GL_MAX_VERTEX_UNIFORM_COMPONENTS) / 4 / (4 + 3 + 1)) + " | ~" + luxCalcTimeMS + "ms") : "Colored lighting " + TextFormatting.RED + "disabled" + TextFormatting.RESET + ".");
 			List<String> left = f3.getLeft();
 			if(left.size() > 5)
 				left.add(5, s);
