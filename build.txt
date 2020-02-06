@@ -7,13 +7,13 @@ git_commit=https://gitlab.com/DragonForge/colored-lux/commit/{{hash}}
 forge_version=14.23.5.2838
 minecraft_version=1.12.2
 mcp=stable_39
-hc_version=2.0.6.7
+hc_version=2.0.6.10
 jei_version=4.11.0.206
 
 #Mod info
 mod_id=lux
 mod_id_fancy=ColoredLux
 mod_name=Colored Lux
-mod_version=9r
+mod_version=11r
 cf_project=347912
 release_type=release

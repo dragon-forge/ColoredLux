@@ -48,19 +48,19 @@ public class Light
 	public static float get(ColoredLight l, int i)
 	{
 		if(i == 0)
-			return l.x;
-		if(i == 1)
-			return l.y;
-		if(i == 2)
-			return l.z;
-		if(i == 3)
 			return l.r;
-		if(i == 4)
+		if(i == 1)
 			return l.g;
-		if(i == 5)
+		if(i == 2)
 			return l.b;
-		if(i == 6)
+		if(i == 3)
 			return l.a;
+		if(i == 4)
+			return l.x;
+		if(i == 5)
+			return l.y;
+		if(i == 6)
+			return l.z;
 		if(i == 7)
 			return l.radius;
 		return Float.NaN;

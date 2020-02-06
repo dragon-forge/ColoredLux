@@ -20,11 +20,7 @@ import com.zeitheron.lux.ColoredLux;
 import com.zeitheron.lux.ConfigCL;
 import com.zeitheron.lux.api.LuxManager;
 import com.zeitheron.lux.api.event.CalculateFogIntensityEvent;
-import com.zeitheron.lux.api.event.GatherLightsEvent;
-import com.zeitheron.lux.api.light.ILightBlockHandler;
-import com.zeitheron.lux.api.light.ILightEntityHandler;
-import com.zeitheron.lux.api.light.LightBlockWrapper;
-import com.zeitheron.lux.api.light.LightEntityWrapper;
+import com.zeitheron.lux.api.light.*;
 import com.zeitheron.lux.client.ClientLightManager;
 import com.zeitheron.lux.client.SmartShaderProgram;
 import com.zeitheron.lux.client.SmartShaderProgram.SmartShaderVariables;
@@ -38,7 +34,6 @@ import net.minecraft.client.gui.*;
 import net.minecraft.client.gui.GuiOptionsRowList.Row;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.resources.IReloadableResourceManager;
 import net.minecraft.client.resources.IResourceManager;
@@ -56,7 +51,6 @@ import net.minecraft.util.SoundEvent;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
-import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.text.TextComponentString;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraft.world.DimensionType;
@@ -83,11 +77,13 @@ import net.minecraftforge.fml.common.gameevent.TickEvent.Phase;
 import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.EntityRegistry;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
+import net.minecraftforge.fml.common.thread.SidedThreadGroups;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import net.minecraftforge.server.command.CommandTreeBase;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL31;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -95,8 +91,6 @@ import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
-import static org.lwjgl.opengl.GL20.*;
 
 public class ClientProxy
 		extends CommonProxy
@@ -148,9 +142,9 @@ public class ClientProxy
 			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers())) try
 			{
 				f.setAccessible(true);
-				Options[] videoSettings = Options[].class.cast(f.get(null));
+				Options[] videoSettings = (Options[]) f.get(null);
 				List<Options> got = new ArrayList<>(Arrays.asList(videoSettings));
-				customOptions.forEach(o -> got.add(o));
+				got.addAll(customOptions);
 				if(Modifier.isFinal(f.getModifiers()))
 					ReflectionUtil.setStaticFinalField(f, got.toArray(new Options[got.size()]));
 				else f.set(null, got.toArray(new Options[got.size()]));
@@ -163,7 +157,7 @@ public class ClientProxy
 			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers())) try
 			{
 				f.setAccessible(true);
-				Options[] videoSettings = Options[].class.cast(f.get(null));
+				Options[] videoSettings = (Options[]) f.get(null);
 				List<Options> got = new ArrayList<>(Arrays.asList(videoSettings));
 				customOptions.forEach(o -> got.add(got.indexOf(Options.USE_VBO), o));
 				ReflectionUtil.setStaticFinalField(f, got.toArray(new Options[got.size()]));
@@ -187,22 +181,12 @@ public class ClientProxy
 		{
 			if(ConfigCL.enableColoredLighting)
 			{
-				glUniform1i(GlShaderStack.glsGetActiveUniformLoc("lightCount"), lights.size());
-				glUniform1i(GlShaderStack.glsGetActiveUniformLoc("colMix"), 0);
-
-				int ll = Math.min(ConfigCL.maxLights, lights.size());
-
-				for(int i = 0; i < ll; i++)
-				{
-					if(i < lights.size())
-					{
-						ColoredLight l = lights.get(i);
-						glUniform3f(GlShaderStack.glsGetActiveUniformLoc("lights[" + i + "].position"), l.x, l.y, l.z);
-						glUniform4f(GlShaderStack.glsGetActiveUniformLoc("lights[" + i + "].color"), l.r, l.g, l.b, l.a);
-						glUniform1f(GlShaderStack.glsGetActiveUniformLoc("lights[" + i + "].radius"), l.radius);
-					}
-				}
-
+				int shader = GlShaderStack.glsActiveProgram();
+				int size = Math.min(ConfigCL.maxLights, lights.size());
+				GL20.glUniform1i(GL20.glGetUniformLocation(shader, "lightCount"), size);
+				GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), ConfigCL.lightAddMode ? 1 : 0);
+				GL20.glUniform1i(GL20.glGetUniformLocation(shader, "vanillaTracing"), 0);
+				ClientLightManager.getUBO().bindToShader(shader, 0, "lightBuffer");
 				return true;
 			}
 			return false;
@@ -211,6 +195,22 @@ public class ClientProxy
 			if(ConfigCL.enableColoredLighting)
 			{
 				ClientProxy.terrainProgram.useShader();
+				return true;
+			}
+			return false;
+		}, () ->
+		{
+			if(ConfigCL.enableColoredLighting)
+			{
+				ClientProxy.entityProgram.useShader();
+				return true;
+			}
+			return false;
+		}, () ->
+		{
+			if(ConfigCL.enableColoredLighting)
+			{
+				SmartShaderProgram.stopShader();
 				return true;
 			}
 			return false;
@@ -556,7 +556,7 @@ public class ClientProxy
 		// No need to start more threads
 		if(thread != null && thread.isAlive()) return;
 
-		thread = new Thread(() ->
+		thread = SidedThreadGroups.CLIENT.newThread(() ->
 		{
 			while(!thread.isInterrupted())
 			{
@@ -578,7 +578,8 @@ public class ClientProxy
 					// Thread termination
 				}
 			}
-		}, "ColoredLuxLightSearch");
+		});
+		thread.setName("ColoredLuxLightSearch");
 		thread.start();
 	}
 
@@ -598,7 +599,7 @@ public class ClientProxy
 		if((reader = Minecraft.getMinecraft().world) != null)
 		{
 			BlockPos playerPos = player.getPosition();
-			int maxDistance = ConfigCL.maxDistance;
+			int maxDistance = ConfigCL.maxSearchDistance;
 			int r = maxDistance / 2;
 			for(BlockPos.MutableBlockPos pos : BlockPos.getAllInBoxMutable(playerPos.add(-r, -r, -r), playerPos.add(r, r, r)))
 			{
@@ -701,12 +702,12 @@ public class ClientProxy
 					SmartShaderProgram.stopShader();
 					MinecraftForge.EVENT_BUS.post(new LightUniformEvent(ClientLightManager.lights));
 					terrainProgram.useShader();
-					ClientLightManager.uploadLights();
+					ClientLightManager.uploadLightsUBO();
 					entityProgram.useShader();
 					entityProgram.setUniform("ticks", ticks + Minecraft.getMinecraft().getRenderPartialTicks());
 					entityProgram.setUniform("sampler", 0);
 					entityProgram.setUniform("lightmap", 1);
-					ClientLightManager.uploadLights();
+					ClientLightManager.uploadLightsUBO();
 
 					entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
 
@@ -887,7 +888,7 @@ public class ClientProxy
 	{
 		if(renderF3)
 		{
-			String s = "[" + TextFormatting.GREEN + "Lux" + TextFormatting.RESET + "] " + (ConfigCL.enableColoredLighting ? ("L: " + ClientLightManager.debugCulledLights + "/" + ClientLightManager.debugLights + "|" + (GL11.glGetInteger(GL20.GL_MAX_VERTEX_UNIFORM_COMPONENTS) / 4 / (4 + 3 + 1)) + " | ~" + luxCalcTimeMS + "ms") : "Colored lighting " + TextFormatting.RED + "disabled" + TextFormatting.RESET + ".");
+			String s = "[" + TextFormatting.GREEN + "Lux" + TextFormatting.RESET + "] " + (ConfigCL.enableColoredLighting ? ("L: " + ClientLightManager.debugCulledLights + "/" + ClientLightManager.debugLights + "|" + (GL11.glGetInteger(GL31.GL_MAX_UNIFORM_BLOCK_SIZE) / Light.FLOAT_SIZE / 4) + " | ~" + luxCalcTimeMS + "ms") : "Colored lighting " + TextFormatting.RED + "disabled" + TextFormatting.RESET + ".");
 			List<String> left = f3.getLeft();
 			if(left.size() > 5)
 				left.add(5, s);
@@ -905,12 +906,6 @@ public class ClientProxy
 		@Override
 		public void notifyBlockUpdate(World worldIn, BlockPos pos, IBlockState oldState, IBlockState newState, int flags)
 		{
-			int maxDistance = ConfigCL.maxDistance;
-			int r = maxDistance / 2;
-			Vec3d cameraPosition = ClientLightManager.cameraPos;
-			ICamera camera = ClientLightManager.camera;
-			ArrayList<ColoredLight> lights = new ArrayList<>();
-			GatherLightsEvent lightsEvent = new GatherLightsEvent(lights, maxDistance, cameraPosition, camera, Minecraft.getMinecraft().getRenderPartialTicks());
 			ILightBlockHandler handler = LuxManager.BLOCK_LUMINANCES.get(newState.getBlock());
 			if(handler != null)
 			{

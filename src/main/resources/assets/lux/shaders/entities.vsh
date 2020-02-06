@@ -1,4 +1,4 @@
-#version 430 compatibility
+#version 330 compatibility
 
 out vec4 lcolor;
 out float intens;
@@ -11,15 +11,12 @@ struct Light
 };
 
 uniform vec3 entityPos;
-uniform Light lights[%LIGHTS%];
 uniform int lightCount;
 
-/*
-layout(std430, binding = 0) buffer layoutLights
+layout(std140) uniform lightBuffer
 {
-    Light lights[];
+    Light lights[%LIGHTS%];
 };
-*/
 
 float distSq(vec3 a, vec3 b)
 {

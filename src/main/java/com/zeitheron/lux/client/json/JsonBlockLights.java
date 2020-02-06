@@ -179,8 +179,7 @@ public class JsonBlockLights
 			{
 				Light.Builder b = Light.builder().pos(pos).radius(radius.apply(flick)).color(red.apply(flick), green.apply(flick), blue.apply(flick));
 				float a = alpha.apply(flick);
-				if(a > 0F && a <= 1F)
-					return b.alpha(a);
+				if(a > 0F && a <= 1F) return b.alpha(a);
 			} catch(RuntimeException e)
 			{
 				System.out.println(e.getMessage());

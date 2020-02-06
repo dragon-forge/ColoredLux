@@ -1,4 +1,4 @@
-#version 430 compatibility
+#version 330 compatibility
 
 out vec3 position;
 out vec4 lcolor;
@@ -14,15 +14,12 @@ struct Light
 uniform int chunkX;
 uniform int chunkY;
 uniform int chunkZ;
-uniform Light lights[%LIGHTS%];
 uniform int lightCount;
 
-/*
-layout(std140) uniform LightBlock
+layout(std140) uniform lightBuffer
 {
     Light lights[%LIGHTS%];
 };
-*/
 
 float distSq(vec3 a, vec3 b)
 {
