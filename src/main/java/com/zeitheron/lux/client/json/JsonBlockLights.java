@@ -1,6 +1,7 @@
 package com.zeitheron.lux.client.json;
 
 import com.google.common.base.Predicates;
+import com.zeitheron.hammercore.api.lighting.ColoredLight;
 import com.zeitheron.hammercore.lib.zlib.error.JSONException;
 import com.zeitheron.hammercore.lib.zlib.io.IOUtils;
 import com.zeitheron.hammercore.lib.zlib.json.JSONArray;
@@ -12,7 +13,6 @@ import com.zeitheron.hammercore.utils.math.functions.ExpressionFunction;
 import com.zeitheron.lux.api.LuxManager;
 import com.zeitheron.lux.api.event.GatherLightsEvent;
 import com.zeitheron.lux.api.light.ILightBlockHandler;
-import com.zeitheron.lux.api.light.Light;
 import it.unimi.dsi.fastutil.longs.Long2ObjectArrayMap;
 import net.minecraft.block.Block;
 import net.minecraft.block.properties.IProperty;
@@ -172,12 +172,12 @@ public class JsonBlockLights
 				states = Predicates.alwaysTrue();
 		}
 
-		public Light.Builder build(BlockPos pos)
+		public ColoredLight.Builder build(BlockPos pos)
 		{
 			ExprFlicker flick = new ExprFlicker(pos);
 			try
 			{
-				Light.Builder b = Light.builder().pos(pos).radius(radius.apply(flick)).color(red.apply(flick), green.apply(flick), blue.apply(flick));
+				ColoredLight.Builder b = ColoredLight.builder().pos(pos).radius(radius.apply(flick)).color(red.apply(flick), green.apply(flick), blue.apply(flick));
 				float a = alpha.apply(flick);
 				if(a > 0F && a <= 1F) return b.alpha(a);
 			} catch(RuntimeException e)
@@ -228,17 +228,17 @@ public class JsonBlockLights
 			this.lights = lights;
 		}
 
-		Long2ObjectArrayMap<List<Light.Builder>> builtLights = new Long2ObjectArrayMap<>();
-		Long2ObjectArrayMap<List<Light.Builder>> builtCache = new Long2ObjectArrayMap<>();
+		Long2ObjectArrayMap<List<ColoredLight.Builder>> builtLights = new Long2ObjectArrayMap<>();
+		Long2ObjectArrayMap<List<ColoredLight.Builder>> builtCache = new Long2ObjectArrayMap<>();
 
 		@Override
 		public void update(IBlockState state, BlockPos pos)
 		{
-			List<Light.Builder> builtLights = this.builtLights.computeIfAbsent(pos.toLong(), l -> new ArrayList<>());
-			List<Light.Builder> builtCache = this.builtCache.computeIfAbsent(pos.toLong(), l -> new ArrayList<>());
+			List<ColoredLight.Builder> builtLights = this.builtLights.computeIfAbsent(pos.toLong(), l -> new ArrayList<>());
+			List<ColoredLight.Builder> builtCache = this.builtCache.computeIfAbsent(pos.toLong(), l -> new ArrayList<>());
 
 			builtCache.clear();
-			final List<Light.Builder> ccache = builtCache;
+			final List<ColoredLight.Builder> ccache = builtCache;
 			lights.forEach(l ->
 			{
 				if(l.states.test(state))

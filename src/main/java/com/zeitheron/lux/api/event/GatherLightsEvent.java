@@ -2,7 +2,6 @@ package com.zeitheron.lux.api.event;
 
 import com.google.common.collect.ImmutableList;
 import com.zeitheron.hammercore.api.lighting.ColoredLight;
-import com.zeitheron.lux.api.light.Light;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.util.math.MathHelper;
@@ -55,20 +54,14 @@ public class GatherLightsEvent
 		return camera;
 	}
 
-	public void addAll(Stream<Light> lights)
+	public void addAll(Stream<ColoredLight> lights)
 	{
 		lights.forEach(this::add);
 	}
 
-	public void addAll(Iterable<Light> lights)
+	public void addAll(Iterable<ColoredLight> lights)
 	{
 		lights.forEach(this::add);
-	}
-
-	public void add(Light.Builder light)
-	{
-		if(light != null)
-			add(light.build());
 	}
 
 	public void add(ColoredLight light)
@@ -89,13 +82,11 @@ public class GatherLightsEvent
 		lights.add(light);
 	}
 
-	public void add(Light light)
+	public void add(ColoredLight.Builder builder)
 	{
-		if(light == null)
+		if(builder == null)
 			return;
-		if(light.a <= 0F)
-			return;
-		add(light.getWrapper());
+		add(builder.build());
 	}
 
 	@Override

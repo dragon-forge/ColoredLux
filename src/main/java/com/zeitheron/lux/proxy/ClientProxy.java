@@ -7,24 +7,22 @@ import com.zeitheron.hammercore.api.events.PreRenderChunkEvent;
 import com.zeitheron.hammercore.api.events.ProfilerEndStartEvent;
 import com.zeitheron.hammercore.api.events.RenderEntityEvent;
 import com.zeitheron.hammercore.api.events.RenderTileEntityEvent;
-import com.zeitheron.hammercore.api.lighting.ColoredLight;
-import com.zeitheron.hammercore.api.lighting.ColoredLightManager;
-import com.zeitheron.hammercore.api.lighting.LightUniformEvent;
-import com.zeitheron.hammercore.api.lighting.WorldTintHandler;
+import com.zeitheron.hammercore.api.lighting.*;
 import com.zeitheron.hammercore.api.lighting.impl.IGlowingBlock;
-import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.UtilsFX;
+import com.zeitheron.hammercore.client.utils.gl.shading.ShaderSource;
+import com.zeitheron.hammercore.client.utils.gl.shading.VariableShaderProgram;
 import com.zeitheron.hammercore.lib.zlib.json.JSONObject;
 import com.zeitheron.hammercore.utils.ReflectionUtil;
 import com.zeitheron.lux.ColoredLux;
 import com.zeitheron.lux.ConfigCL;
 import com.zeitheron.lux.api.LuxManager;
 import com.zeitheron.lux.api.event.CalculateFogIntensityEvent;
-import com.zeitheron.lux.api.light.*;
+import com.zeitheron.lux.api.light.ILightBlockHandler;
+import com.zeitheron.lux.api.light.ILightEntityHandler;
+import com.zeitheron.lux.api.light.LightBlockWrapper;
+import com.zeitheron.lux.api.light.LightEntityWrapper;
 import com.zeitheron.lux.client.ClientLightManager;
-import com.zeitheron.lux.client.SmartShaderProgram;
-import com.zeitheron.lux.client.SmartShaderProgram.SmartShaderVariables;
-import com.zeitheron.lux.client.SmartShaderProgram.SmartVariable;
 import com.zeitheron.lux.client.ThreadTimer;
 import com.zeitheron.lux.client.json.JsonBlockLights;
 import com.zeitheron.lux.client.json.JsonEntityLights;
@@ -83,12 +81,12 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 import net.minecraftforge.server.command.CommandTreeBase;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL31;
 
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.*;
+import java.util.function.IntSupplier;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -100,8 +98,8 @@ public class ClientProxy
 	public static final Map<Integer, LightEntityWrapper> EXISTING_ENTS = Collections.synchronizedMap(new HashMap<>());
 
 	private static int ticks;
-	public static SmartShaderProgram terrainProgram;
-	public static SmartShaderProgram entityProgram;
+	public static VariableShaderProgram terrainProgram;
+	public static VariableShaderProgram entityProgram;
 	public static boolean isGui = false;
 
 	static final int runtimeCores = Runtime.getRuntime().availableProcessors();
@@ -113,15 +111,16 @@ public class ClientProxy
 	Thread thread;
 
 	private static int maxSessionLights = 1;
-	public static final SmartVariable LIGHT_COUNT = new SmartVariable("LIGHTS", () ->
+
+	public static final IntSupplier UNIF_LIGHTS = () ->
 	{
-		int cl = ClientLightManager.lights.size();
+		int cl = ClientLightManager.debugLights;
 		if(ConfigCL.minLights > maxSessionLights)
 			maxSessionLights = ConfigCL.minLights;
 		if(cl > maxSessionLights)
 			maxSessionLights = Math.max(maxSessionLights, Math.min(ConfigCL.maxLights, 2 * cl));
-		return Integer.toString(maxSessionLights);
-	});
+		return maxSessionLights;
+	};
 
 	public static final List<Options> customOptions = new ArrayList<>();
 	public static final Options LUX_ENABLE_LIGHTING = EnumHelperClient.addOptions("LUX_ENABLE_LIGHTING", "options.lux:lighting", false, true);
@@ -134,6 +133,7 @@ public class ClientProxy
 		RenderTileEntityEvent.enable();
 		PreRenderChunkEvent.enable();
 		MinecraftForge.EVENT_BUS.register(this);
+		ColoredLightManager.UNIFORM_LIGHT_COUNT = UNIF_LIGHTS;
 
 		ColoredLux.LOG.info("Found " + runtimeCores + " available processing threads. The light update frequency will be max(FPS/" + lightTPSDivisor + ", 1) Hz");
 
@@ -181,12 +181,7 @@ public class ClientProxy
 		{
 			if(ConfigCL.enableColoredLighting)
 			{
-				int shader = GlShaderStack.glsActiveProgram();
-				int size = Math.min(ConfigCL.maxLights, lights.size());
-				GL20.glUniform1i(GL20.glGetUniformLocation(shader, "lightCount"), size);
-				GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), ConfigCL.lightAddMode ? 1 : 0);
-				GL20.glUniform1i(GL20.glGetUniformLocation(shader, "vanillaTracing"), 0);
-				ClientLightManager.getUBO().bindToShader(shader, 0, "lightBuffer");
+				ClientLightManager.uploadLightsUBO();
 				return true;
 			}
 			return false;
@@ -194,7 +189,7 @@ public class ClientProxy
 		{
 			if(ConfigCL.enableColoredLighting)
 			{
-				ClientProxy.terrainProgram.useShader();
+				ClientProxy.terrainProgram.bindShader();
 				return true;
 			}
 			return false;
@@ -202,7 +197,7 @@ public class ClientProxy
 		{
 			if(ConfigCL.enableColoredLighting)
 			{
-				ClientProxy.entityProgram.useShader();
+				ClientProxy.entityProgram.bindShader();
 				return true;
 			}
 			return false;
@@ -210,7 +205,7 @@ public class ClientProxy
 		{
 			if(ConfigCL.enableColoredLighting)
 			{
-				SmartShaderProgram.stopShader();
+				ClientProxy.terrainProgram.unbindShader();
 				return true;
 			}
 			return false;
@@ -218,7 +213,7 @@ public class ClientProxy
 		{
 			if(ConfigCL.enableColoredLighting)
 			{
-				SmartShaderProgram.stopShader();
+				ClientProxy.entityProgram.unbindShader();
 				return true;
 			}
 			return false;
@@ -251,8 +246,8 @@ public class ClientProxy
 						JsonEntityLights.reload();
 						EXISTING_ENTS.clear();
 						sender.sendMessage(new TextComponentString("Reloading shaders"));
-						terrainProgram.reload();
-						entityProgram.reload();
+						terrainProgram.onReload();
+						entityProgram.onReload();
 						sender.sendMessage(new TextComponentString(TextFormatting.GREEN + "Lux reloaded!"));
 					}
 				});
@@ -322,6 +317,18 @@ public class ClientProxy
 				return 0;
 			}
 		});
+
+		terrainProgram = new VariableShaderProgram()
+				.addVariable(new ShaderLightingVariable("getLight", "Light"))
+				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", "shaders/terrain.fsh")))
+				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", "shaders/terrain.vsh")))
+				.subscribe4Events();
+
+		entityProgram = new VariableShaderProgram()
+				.addVariable(new ShaderLightingVariable("getLight", "Light"))
+				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", "shaders/entities.fsh")))
+				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", "shaders/entities.vsh")))
+				.subscribe4Events();
 	}
 
 	public static final List<ColoredLight> lights = new ArrayList<>();
@@ -655,9 +662,8 @@ public class ClientProxy
 	{
 		if(resourcePredicate.test(VanillaResourceType.SHADERS))
 		{
-			terrainProgram = new SmartShaderProgram(new ResourceLocation("lux", "terrain"), resourceManager, new SmartShaderVariables(LIGHT_COUNT));
-
-			entityProgram = new SmartShaderProgram(new ResourceLocation("lux", "entities"), resourceManager, new SmartShaderVariables(LIGHT_COUNT));
+//			terrainProgram = new SmartShaderProgram(new ResourceLocation("lux", "terrain"), resourceManager, new SmartShaderVariables(LIGHT_COUNT));
+//			entityProgram = new SmartShaderProgram(new ResourceLocation("lux", "entities"), resourceManager, new SmartShaderVariables(LIGHT_COUNT));
 		}
 	}
 
@@ -683,7 +689,7 @@ public class ClientProxy
 
 				isGui = false;
 				precedesEntities = true;
-				terrainProgram.useShader();
+				terrainProgram.bindShader();
 				terrainProgram.setUniform("ticks", ticks + pt);
 				terrainProgram.setUniform("sampler", 0);
 				terrainProgram.setUniform("lightmap", 1);
@@ -699,34 +705,31 @@ public class ClientProxy
 					if(thread == null || !thread.isAlive())
 						startThread();
 					ClientLightManager.update(Minecraft.getMinecraft().world);
-					SmartShaderProgram.stopShader();
+					GL20.glUseProgram(0);
 					MinecraftForge.EVENT_BUS.post(new LightUniformEvent(ClientLightManager.lights));
-					terrainProgram.useShader();
+					terrainProgram.bindShader();
 					ClientLightManager.uploadLightsUBO();
-					entityProgram.useShader();
+					entityProgram.bindShader();
 					entityProgram.setUniform("ticks", ticks + Minecraft.getMinecraft().getRenderPartialTicks());
 					entityProgram.setUniform("sampler", 0);
 					entityProgram.setUniform("lightmap", 1);
 					ClientLightManager.uploadLightsUBO();
-
 					entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
-
 					entityProgram.setUniform("worldTint", wtR, wtG, wtB);
 					entityProgram.setUniform("worldTintIntensity", wtInt);
-
 					entityProgram.setUniform("lightingEnabled", GL11.glIsEnabled(GL11.GL_LIGHTING));
-					terrainProgram.useShader();
+					terrainProgram.bindShader();
 					postedLights = true;
 					ClientLightManager.clear();
 				}
 			}
 			if(event.getSection().compareTo("sky") == 0)
 			{
-				SmartShaderProgram.stopShader();
+				GL20.glUseProgram(0);
 			}
 			if(event.getSection().compareTo("litParticles") == 0)
 			{
-				terrainProgram.useShader();
+				terrainProgram.bindShader();
 				terrainProgram.setUniform("sampler", 0);
 				terrainProgram.setUniform("lightmap", 1);
 				terrainProgram.setUniform("playerPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
@@ -736,19 +739,19 @@ public class ClientProxy
 			}
 			if(event.getSection().compareTo("particles") == 0)
 			{
-				entityProgram.useShader();
+				entityProgram.bindShader();
 				entityProgram.setUniform("entityPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
 				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
 			}
 			if(event.getSection().compareTo("weather") == 0)
 			{
-				SmartShaderProgram.stopShader();
+				GL20.glUseProgram(0);
 			}
 			if(event.getSection().compareTo("entities") == 0)
 			{
 				if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
 				{
-					entityProgram.useShader();
+					entityProgram.bindShader();
 					entityProgram.setUniform("lightingEnabled", true);
 					World wld = Minecraft.getMinecraft().world;
 					CalculateFogIntensityEvent e = new CalculateFogIntensityEvent(wld, wld.provider.getDimensionType() == DimensionType.NETHER ? 0.015625f : 1.0f);
@@ -760,32 +763,32 @@ public class ClientProxy
 			{
 				if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
 				{
-					entityProgram.useShader();
+					entityProgram.bindShader();
 					entityProgram.setUniform("lightingEnabled", true);
 				}
 			}
 			if(event.getSection().compareTo("outline") == 0)
 			{
-				SmartShaderProgram.stopShader();
+				GL20.glUseProgram(0);
 			}
 			if(event.getSection().compareTo("aboveClouds") == 0)
 			{
-				SmartShaderProgram.stopShader();
+				GL20.glUseProgram(0);
 			}
 			if(event.getSection().compareTo("destroyProgress") == 0)
 			{
-				SmartShaderProgram.stopShader();
+				GL20.glUseProgram(0);
 			}
 			if(event.getSection().compareTo("translucent") == 0)
 			{
-				terrainProgram.useShader();
+				terrainProgram.bindShader();
 				terrainProgram.setUniform("sampler", 0);
 				terrainProgram.setUniform("lightmap", 1);
 				terrainProgram.setUniform("playerPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
 			}
 			if(event.getSection().compareTo("hand") == 0)
 			{
-				entityProgram.useShader();
+				entityProgram.bindShader();
 				entityProgram.setUniform("entityPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
 				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
 				precedesEntities = true;
@@ -793,7 +796,7 @@ public class ClientProxy
 			if(event.getSection().compareTo("gui") == 0)
 			{
 				isGui = true;
-				SmartShaderProgram.stopShader();
+				GL20.glUseProgram(0);
 			}
 		}
 	}
@@ -817,10 +820,10 @@ public class ClientProxy
 		if(ConfigCL.enableColoredLighting)
 		{
 			if(LuxManager.blocksShader(e.getEntity()))
-				SmartShaderProgram.stopShader();
+				GL20.glUseProgram(0);
 			else if(section.equalsIgnoreCase("entities") || section.equalsIgnoreCase("blockEntities"))
-				entityProgram.useShader();
-			if(SmartShaderProgram.isCurrentShader(entityProgram))
+				entityProgram.bindShader();
+			if(entityProgram.isActive())
 			{
 				entityProgram.setUniform("entityPos", (float) e.getEntity().posX, (float) e.getEntity().posY + e.getEntity().height / 2.0f, (float) e.getEntity().posZ);
 				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
@@ -840,10 +843,10 @@ public class ClientProxy
 		if(ConfigCL.enableColoredLighting)
 		{
 			if(LuxManager.blocksShader(e.getTile()))
-				SmartShaderProgram.stopShader();
+				GL20.glUseProgram(0);
 			else if(section.equalsIgnoreCase("entities") || section.equalsIgnoreCase("blockEntities"))
-				entityProgram.useShader();
-			if(SmartShaderProgram.isCurrentShader(entityProgram))
+				entityProgram.bindShader();
+			if(entityProgram.isActive())
 			{
 				entityProgram.setUniform("entityPos", (float) e.getTile().getPos().getX(), (float) e.getTile().getPos().getY(), (float) e.getTile().getPos().getZ());
 				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
@@ -854,7 +857,7 @@ public class ClientProxy
 	@SubscribeEvent
 	public void preRenderChunk(PreRenderChunkEvent e)
 	{
-		if(ConfigCL.enableColoredLighting && SmartShaderProgram.isCurrentShader(terrainProgram))
+		if(ConfigCL.enableColoredLighting && terrainProgram.isActive())
 		{
 			BlockPos pos = e.getRenderChunk().getPosition();
 			terrainProgram.setUniform("chunkX", pos.getX());
@@ -870,7 +873,7 @@ public class ClientProxy
 		if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
 		{
 			GlStateManager.disableLighting();
-			SmartShaderProgram.stopShader();
+			GL20.glUseProgram(0);
 		}
 	}
 
@@ -888,7 +891,7 @@ public class ClientProxy
 	{
 		if(renderF3)
 		{
-			String s = "[" + TextFormatting.GREEN + "Lux" + TextFormatting.RESET + "] " + (ConfigCL.enableColoredLighting ? ("L: " + ClientLightManager.debugCulledLights + "/" + ClientLightManager.debugLights + "|" + (GL11.glGetInteger(GL31.GL_MAX_UNIFORM_BLOCK_SIZE) / Light.FLOAT_SIZE / 4) + " | ~" + luxCalcTimeMS + "ms") : "Colored lighting " + TextFormatting.RED + "disabled" + TextFormatting.RESET + ".");
+			String s = "[" + TextFormatting.GREEN + "Lux" + TextFormatting.RESET + "] " + (ConfigCL.enableColoredLighting ? ("L: " + ClientLightManager.debugCulledLights + "/" + ClientLightManager.debugLights + "@" + (ConfigCL.maxLights) + " | ~" + luxCalcTimeMS + "ms") : "Colored lighting " + TextFormatting.RED + "disabled" + TextFormatting.RESET + ".");
 			List<String> left = f3.getLeft();
 			if(left.size() > 5)
 				left.add(5, s);

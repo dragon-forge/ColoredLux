@@ -4,12 +4,10 @@ import com.zeitheron.hammercore.api.lighting.ColoredLight;
 import com.zeitheron.hammercore.api.lighting.ColoredLightManager;
 import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.gl.GLBuffer;
-import com.zeitheron.hammercore.client.utils.gl.IGLBufferStream;
 import com.zeitheron.lux.ConfigCL;
 import com.zeitheron.lux.api.event.GatherLightsEvent;
 import com.zeitheron.lux.api.light.ILightItem;
 import com.zeitheron.lux.api.light.ILightProvider;
-import com.zeitheron.lux.api.light.Light;
 import com.zeitheron.lux.proxy.ClientProxy;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -24,14 +22,17 @@ import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
-import org.lwjgl.BufferUtils;
-import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL31;
 
-import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
+
+import static org.lwjgl.opengl.GL30.glBindBufferBase;
+import static org.lwjgl.opengl.GL31.glGetUniformBlockIndex;
+import static org.lwjgl.opengl.GL31.glUniformBlockBinding;
 
 public class ClientLightManager
 {
@@ -71,48 +72,34 @@ public class ClientLightManager
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "lightCount"), size);
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), ConfigCL.lightAddMode ? 1 : 0);
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "vanillaTracing"), 0);
-		getUBO().bindToShader(shader, 0, "lightBuffer");
-	}
 
-	private static GLBuffer lightUBO;
+//		if(segment == null) segment = new LightSegment(0, 2048);
+//		GLBuffer glBuffer = segment.getUBO();
+//		segment.getUBO().bindToShader(shader, 0, "lightBuffer0");
+//
+//		int UBO_TRANSFORM_INDEX = 0;
+//
+//		int bufIdx = glGetUniformBlockIndex(shader, "lightBuffer1");
+//		glUniformBlockBinding(shader, bufIdx, UBO_TRANSFORM_INDEX);
+//		glBindBufferBase(glBuffer.bufferKind, UBO_TRANSFORM_INDEX, glBuffer.buffer);
+//
+//		UBO_TRANSFORM_INDEX = 1;
+//
+//		bufIdx = glGetUniformBlockIndex(shader, "lightBuffer1");
+//		glUniformBlockBinding(shader, bufIdx, UBO_TRANSFORM_INDEX);
+//		glBindBufferBase(glBuffer.bufferKind, UBO_TRANSFORM_INDEX, glBuffer.buffer);
 
-	private static int uboSize;
-	private static FloatBuffer uboData;
-	private static IGLBufferStream<Float> uboStream;
-
-	private static FloatBuffer updateUBO()
-	{
-		if(uboData == null || uboSize < lights.size())
+		int segCount = getSegmentCount();
+		for(int i = 0; i < segCount; ++i)
 		{
-			uboSize = lights.size();
-			uboData = BufferUtils.createFloatBuffer(uboSize * Light.FLOAT_SIZE);
-			uboStream = uboData::put;
+			LightSegment seg = getSegment(i);
+			if(seg != null)
+			{
+				GLBuffer glBuffer = seg.getUBO();
+				glUniformBlockBinding(shader, glGetUniformBlockIndex(shader, "lightBuffer" + i), i);
+				glBindBufferBase(glBuffer.bufferKind, i, glBuffer.buffer);
+			}
 		}
-		uboData.clear();
-		for(ColoredLight l : lights) l.writeFloats(uboStream);
-		uboData.flip();
-		return uboData;
-	}
-
-	public static GLBuffer getUBO()
-	{
-		createUBO();
-		return lightUBO;
-	}
-
-	private static void createUBO()
-	{
-		if(lightUBO != null)
-			return;
-		lightUBO = new GLBuffer();
-		lightUBO.bufferData(updateUBO());
-		GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, 0);
-	}
-
-	private static void refreshUBO()
-	{
-		createUBO();
-		lightUBO.bufferData(updateUBO());
 	}
 
 	private static Vec3d getCurrentPosition(Entity entity, float partialTicks)
@@ -182,7 +169,38 @@ public class ClientLightManager
 
 		lights.sort(distComparator);
 
-		refreshUBO();
+		int segCount = getSegmentCount();
+		for(int i = 0; i < segCount; ++i)
+		{
+			LightSegment s = getSegment(i);
+			if(s != null) s.refreshUBO();
+		}
+
+//		if(segment == null) segment = new LightSegment(0, 2048);
+//		segment.refreshUBO();
+	}
+
+	public static LightSegment segment;
+
+	public static final List<LightSegment> lightSegments = new ArrayList<>();
+
+	public static int getSegmentCount()
+	{
+		int lps = GL11.glGetInteger(GL31.GL_MAX_UNIFORM_BLOCK_SIZE) / ColoredLight.FLOAT_SIZE / 4;
+		int segments = Math.max(1, (int) Math.ceil(ClientProxy.UNIF_LIGHTS.getAsInt() / (double) lps));
+		for(int i = 0; i < segments; ++i)
+		{
+			int start = lps * i;
+			int end = start + lps;
+			if(lightSegments.size() == i) lightSegments.add(new LightSegment(start, end));
+		}
+		return segments;
+	}
+
+	public static LightSegment getSegment(int i)
+	{
+		if(i >= 0 && i < lightSegments.size()) return lightSegments.get(i);
+		return null;
 	}
 
 	public static class DistanceComparator

@@ -13,10 +13,7 @@ struct Light
 uniform vec3 entityPos;
 uniform int lightCount;
 
-layout(std140) uniform lightBuffer
-{
-    Light lights[%LIGHTS%];
-};
+#variable getLight
 
 float distSq(vec3 a, vec3 b)
 {
@@ -39,25 +36,27 @@ void main()
 	float totalIntens = 0;
 	for(int i = 0; i < lightCount; i++)
 	{
-		float radius = pow(lights[i].radius, 2);
-		float dist = distSq(lights[i].position, position);
+        Light l = getLight(i);
+		float radius = pow(l.radius, 2);
+		float dist = distSq(l.position, position);
 		if(dist <= radius)
 		{
-			float intensity = pow(max(0, 1.0f - distance(lights[i].position, position) / lights[i].radius), 2);
+			float intensity = pow(max(0, 1.0f - distance(l.position, position) / l.radius), 2);
 			totalIntens += intensity;
 			maxIntens = max(maxIntens, intensity);
 		}
 	}
 	for(int i = 0; i < lightCount; i++)
 	{
-		float radius = pow(lights[i].radius, 2);
-		float dist = distSq(lights[i].position, position);
+        Light l = getLight(i);
+		float radius = pow(l.radius, 2);
+		float dist = distSq(l.position, position);
 		if(dist <= radius)
 		{
-			float intensity = pow(max(0, 1.0f - distance(lights[i].position, position) / lights[i].radius), 2);
-			sumR += lights[i].color.r * (intensity / totalIntens);
-			sumG += lights[i].color.g * (intensity / totalIntens);
-			sumB += lights[i].color.b * (intensity / totalIntens);
+			float intensity = pow(max(0, 1.0f - distance(l.position, position) / l.radius), 2);
+			sumR += l.color.r * (intensity / totalIntens);
+			sumG += l.color.g * (intensity / totalIntens);
+			sumB += l.color.b * (intensity / totalIntens);
 		}
 	}
 	lcolor = vec4(max(sumR * 1.5f, 0.0f), max(sumG * 1.5f, 0.0f), max(sumB * 1.5f, 0.0f), 1.0f);
