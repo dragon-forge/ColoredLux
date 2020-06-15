@@ -2,7 +2,7 @@
 	{
 	  "modid": "lux",
 	  "name": "Colored Lux",
-	  "description": "Yet another colored lighting mod. Because Albedo doesn't do the trick.",
+	  "description": "Yet another colored lighting mod. Because Albedo doesn't do the trick. Allows customizable lighting for mods, and easily configurable with Lux Packs.",
 	  "version": "${version}",
 	  "mcversion": "${mcversion}",
 	  "authorList": ["Zeitheron"]

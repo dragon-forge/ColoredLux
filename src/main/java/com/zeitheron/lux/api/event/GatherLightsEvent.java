@@ -2,6 +2,7 @@ package com.zeitheron.lux.api.event;
 
 import com.google.common.collect.ImmutableList;
 import com.zeitheron.hammercore.api.lighting.ColoredLight;
+import com.zeitheron.lux.ConfigCL;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.culling.ICamera;
 import net.minecraft.util.math.MathHelper;
@@ -19,6 +20,8 @@ public class GatherLightsEvent
 	private final Vec3d cameraPosition;
 	private final Frustum camera;
 	private final float partialTicks;
+
+	private double furthest;
 
 	public GatherLightsEvent(ArrayList<ColoredLight> lights, float maxDistance, Vec3d cameraPosition, Frustum camera, float partialTicks)
 	{
@@ -66,19 +69,30 @@ public class GatherLightsEvent
 
 	public void add(ColoredLight light)
 	{
+		Integer rem = null;
 		if(light == null)
 			return;
 		if(light.a <= 0F)
 			return;
 		float radius = light.radius;
+
+		Float dist = null;
 		if(cameraPosition != null)
 		{
-			double dist = MathHelper.sqrt(cameraPosition.squareDistanceTo(light.x, light.y, light.z));
-			if(dist > radius + maxDistance)
-				return;
+			dist = MathHelper.sqrt(cameraPosition.squareDistanceTo(light.x, light.y, light.z));
+			if(dist > radius + maxDistance) return;
 		}
+
 		if(camera != null && !camera.isBoxInFrustum(light.x - radius, light.y - radius, light.z - radius, light.x + radius, light.y + radius, light.z + radius))
 			return;
+
+		// New optimization node: prevents furthest lights from being added when over the limit. (reduce sorting time)
+		if(dist != null)
+		{
+			if(lights.size() >= ConfigCL.maxLights && dist - radius > furthest) return;
+			if(dist - radius > furthest) furthest = Math.max(dist - radius, furthest);
+		}
+
 		lights.add(light);
 	}
 

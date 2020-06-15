@@ -12,15 +12,19 @@ import com.zeitheron.hammercore.utils.math.ExpressionEvaluator;
 import com.zeitheron.hammercore.utils.math.functions.ExpressionFunction;
 import com.zeitheron.lux.api.LuxManager;
 import com.zeitheron.lux.api.event.GatherLightsEvent;
+import com.zeitheron.lux.api.event.ReloadLuxManagerEvent;
 import com.zeitheron.lux.api.light.ILightBlockHandler;
 import it.unimi.dsi.fastutil.longs.Long2ObjectArrayMap;
 import net.minecraft.block.Block;
 import net.minecraft.block.properties.IProperty;
 import net.minecraft.block.state.IBlockState;
+import net.minecraft.init.Blocks;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraftforge.common.property.IExtendedBlockState;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import java.io.File;
@@ -32,6 +36,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+@Mod.EventBusSubscriber
 public class JsonBlockLights
 {
 	static File file;
@@ -59,41 +64,47 @@ public class JsonBlockLights
 		if(file == null)
 			return;
 
-		if(!handlers.isEmpty())
-		{
-			handlers.keySet().forEach(LuxManager.BLOCK_LUMINANCES::remove);
-			handlers.clear();
-		}
+		handlers.clear();
 
 		try(FileInputStream in = new FileInputStream(file))
 		{
 			JSONObject root = (JSONObject) new JSONTokener(new String(IOUtils.pipeOut(in))).nextValue();
-
-			for(String key : root.keySet())
-			{
-				if(key.startsWith("#"))
-					continue;
-				Block blk = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(key));
-				if(blk != null)
-				{
-					Object o = root.get(key);
-					List<JSONObject> lights = new ArrayList<>();
-					if(o instanceof JSONArray)
-					{
-						JSONArray a = (JSONArray) o;
-						for(int i = 0; i < a.length(); ++i)
-							lights.add(a.getJSONObject(i));
-					} else if(o instanceof JSONObject)
-						lights.add((JSONObject) o);
-					handlers.put(blk, new PresetLightBlockHandler(lights.stream().map(ParsedLight::new).collect(Collectors.toList())));
-				}
-			}
+			handlers.putAll(parse(root));
 		} catch(IOException | JSONException ioe)
 		{
 			ioe.printStackTrace();
 		}
+	}
 
+	@SubscribeEvent
+	public static void reloadLuxManager(ReloadLuxManagerEvent e)
+	{
 		handlers.forEach(LuxManager.BLOCK_LUMINANCES::put);
+	}
+
+	public static Map<Block, ILightBlockHandler> parse(JSONObject root)
+	{
+		Map<Block, ILightBlockHandler> h = new HashMap<>();
+		for(String key : root.keySet())
+		{
+			if(key.startsWith("#"))
+				continue;
+			Block blk = ForgeRegistries.BLOCKS.getValue(new ResourceLocation(key));
+			if(blk != null && blk != Blocks.AIR)
+			{
+				Object o = root.get(key);
+				List<JSONObject> lights = new ArrayList<>();
+				if(o instanceof JSONArray)
+				{
+					JSONArray a = (JSONArray) o;
+					for(int i = 0; i < a.length(); ++i)
+						lights.add(a.getJSONObject(i));
+				} else if(o instanceof JSONObject)
+					lights.add((JSONObject) o);
+				h.put(blk, new PresedLightBlockHandler(lights.stream().map(ParsedLight::new).collect(Collectors.toList())));
+			}
+		}
+		return h;
 	}
 
 	public static class ParsedLight
@@ -218,12 +229,12 @@ public class JsonBlockLights
 		}
 	}
 
-	public static class PresetLightBlockHandler
+	public static class PresedLightBlockHandler
 			implements ILightBlockHandler
 	{
 		public final List<ParsedLight> lights;
 
-		public PresetLightBlockHandler(List<ParsedLight> lights)
+		public PresedLightBlockHandler(List<ParsedLight> lights)
 		{
 			this.lights = lights;
 		}

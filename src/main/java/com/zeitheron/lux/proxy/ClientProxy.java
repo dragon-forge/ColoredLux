@@ -1,14 +1,12 @@
 package com.zeitheron.lux.proxy;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableMap;
 import com.zeitheron.hammercore.api.events.PreRenderChunkEvent;
 import com.zeitheron.hammercore.api.events.ProfilerEndStartEvent;
 import com.zeitheron.hammercore.api.events.RenderEntityEvent;
 import com.zeitheron.hammercore.api.events.RenderTileEntityEvent;
 import com.zeitheron.hammercore.api.lighting.*;
-import com.zeitheron.hammercore.api.lighting.impl.IGlowingBlock;
 import com.zeitheron.hammercore.client.utils.UtilsFX;
 import com.zeitheron.hammercore.client.utils.gl.shading.ShaderSource;
 import com.zeitheron.hammercore.client.utils.gl.shading.VariableShaderProgram;
@@ -24,8 +22,10 @@ import com.zeitheron.lux.api.light.LightBlockWrapper;
 import com.zeitheron.lux.api.light.LightEntityWrapper;
 import com.zeitheron.lux.client.ClientLightManager;
 import com.zeitheron.lux.client.ThreadTimer;
+import com.zeitheron.lux.client.gui.GuiScreenLuxPacks;
 import com.zeitheron.lux.client.json.JsonBlockLights;
 import com.zeitheron.lux.client.json.JsonEntityLights;
+import com.zeitheron.lux.luxpack.LuxPackRepository;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.*;
@@ -33,8 +33,6 @@ import net.minecraft.client.gui.GuiOptionsRowList.Row;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.resources.I18n;
-import net.minecraft.client.resources.IReloadableResourceManager;
-import net.minecraft.client.resources.IResourceManager;
 import net.minecraft.client.settings.GameSettings.Options;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
@@ -61,9 +59,6 @@ import net.minecraftforge.client.event.GuiScreenEvent.InitGuiEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent.ElementType;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
-import net.minecraftforge.client.resource.IResourceType;
-import net.minecraftforge.client.resource.ISelectiveResourceReloadListener;
-import net.minecraftforge.client.resource.VanillaResourceType;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.property.IExtendedBlockState;
 import net.minecraftforge.common.property.IUnlistedProperty;
@@ -74,7 +69,6 @@ import net.minecraftforge.fml.common.gameevent.TickEvent.ClientTickEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent.Phase;
 import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.EntityRegistry;
-import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import net.minecraftforge.fml.common.thread.SidedThreadGroups;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
@@ -87,12 +81,11 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.function.IntSupplier;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
 
 public class ClientProxy
 		extends CommonProxy
-		implements ISelectiveResourceReloadListener
 {
 	public static final Map<BlockPos, LightBlockWrapper> EXISTING = Collections.synchronizedMap(new HashMap<>());
 	public static final Map<Integer, LightEntityWrapper> EXISTING_ENTS = Collections.synchronizedMap(new HashMap<>());
@@ -124,6 +117,7 @@ public class ClientProxy
 
 	public static final List<Options> customOptions = new ArrayList<>();
 	public static final Options LUX_ENABLE_LIGHTING = EnumHelperClient.addOptions("LUX_ENABLE_LIGHTING", "options.lux:lighting", false, true);
+	public static final Options LUX_PACKS = EnumHelperClient.addOptions("LUX_LUXPACKS", "options.lux:packs", false, true);
 
 	@Override
 	public void preInit(FMLPreInitializationEvent e)
@@ -138,6 +132,8 @@ public class ClientProxy
 		ColoredLux.LOG.info("Found " + runtimeCores + " available processing threads. The light update frequency will be max(FPS/" + lightTPSDivisor + ", 1) Hz");
 
 		customOptions.add(LUX_ENABLE_LIGHTING);
+		customOptions.add(LUX_PACKS);
+
 		if(OptifineInstalled) for(Field f : GuiPerformanceSettingsOF.getDeclaredFields())
 			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers())) try
 			{
@@ -176,6 +172,7 @@ public class ClientProxy
 			old.renameTo(new File(cfg, "lights-block.json"));
 		JsonBlockLights.setup(new File(cfg, "lights-block.json"));
 		JsonEntityLights.setup(new File(cfg, "lights-entity.json"));
+		LuxPackRepository.getInstance().setup(new File(cfg, "luxpacks.json"));
 
 		ColoredLightManager.registerOperator(() -> ConfigCL.enableColoredLighting, () ->
 		{
@@ -239,15 +236,14 @@ public class ClientProxy
 					@Override
 					public void execute(MinecraftServer server, ICommandSender sender, String[] args) throws CommandException
 					{
-						sender.sendMessage(new TextComponentString("Reloading lights-block.json"));
-						JsonBlockLights.reload();
+						sender.sendMessage(new TextComponentString("Resetting bound lights"));
 						EXISTING.clear();
-						sender.sendMessage(new TextComponentString("Reloading lights-entity.json"));
-						JsonEntityLights.reload();
 						EXISTING_ENTS.clear();
 						sender.sendMessage(new TextComponentString("Reloading shaders"));
 						terrainProgram.onReload();
 						entityProgram.onReload();
+						sender.sendMessage(new TextComponentString("Reloading lux manager"));
+						LuxManager.reload();
 						sender.sendMessage(new TextComponentString(TextFormatting.GREEN + "Lux reloaded!"));
 					}
 				});
@@ -318,17 +314,41 @@ public class ClientProxy
 			}
 		});
 
-		terrainProgram = new VariableShaderProgram()
+		ClientProxy.terrainProgram = new VariableShaderProgram()
+				.id(new ResourceLocation("lux", "terrain"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
 				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", "shaders/terrain.fsh")))
 				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", "shaders/terrain.vsh")))
+				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE)
+				.onCompilationFailed(prog ->
+				{
+					ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true).set(ConfigCL.enableColoredLighting = false);
+					ConfigCL.cfgs.save();
+				})
+				.doGLLog(false)
 				.subscribe4Events();
 
-		entityProgram = new VariableShaderProgram()
+		ClientProxy.entityProgram = new VariableShaderProgram()
+				.id(new ResourceLocation("lux", "entity"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
 				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", "shaders/entities.fsh")))
 				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", "shaders/entities.vsh")))
+				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE)
+				.onCompilationFailed(prog ->
+				{
+					ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true).set(ConfigCL.enableColoredLighting = false);
+					ConfigCL.cfgs.save();
+				})
+				.doGLLog(false)
 				.subscribe4Events();
+	}
+
+	@Override
+	public void reloadLuxManager()
+	{
+		EXISTING.clear();
+		EXISTING_ENTS.clear();
+		LuxPackRepository.getInstance().reload();
 	}
 
 	public static final List<ColoredLight> lights = new ArrayList<>();
@@ -453,8 +473,8 @@ public class ClientProxy
 			@Override
 			public void drawButton(Minecraft mc, int mouseX, int mouseY, float partialTicks)
 			{
-				boolean state = getState(getOption());
-				displayString = I18n.format(getOption().getTranslation()) + ": " + (state ? TextFormatting.DARK_GREEN : TextFormatting.DARK_RED) + I18n.format("options.o" + (state ? "n" : "ff")) + TextFormatting.RESET;
+				Boolean state = getState(getOption());
+				displayString = I18n.format(getOption().getTranslation()) + (state != null ? (": " + (state ? TextFormatting.DARK_GREEN : TextFormatting.DARK_RED) + I18n.format("options.o" + (state ? "n" : "ff"))) : "") + TextFormatting.RESET;
 				super.drawButton(mc, mouseX, mouseY, partialTicks);
 				if(isMouseOver())
 				{
@@ -462,7 +482,7 @@ public class ClientProxy
 						hoverTime = System.currentTimeMillis();
 					else if(System.currentTimeMillis() - hoverTime.longValue() >= 1500L)
 					{
-						toDrawTooltip = new ArrayList<String>();
+						toDrawTooltip = new ArrayList<>();
 						toDrawTooltip.add("Colored Lux:");
 						toDrawTooltip.add("");
 						describe(getOption(), toDrawTooltip);
@@ -535,12 +555,21 @@ public class ClientProxy
 			}
 			desc.addAll(Arrays.asList(str.split("<br>")));
 		}
+
+		if(opt == LUX_PACKS)
+		{
+			String str = I18n.format("options.lux:packs.desc");
+			desc.addAll(Arrays.asList(str.split("<br>")));
+		}
 	}
 
-	public boolean getState(Options opt)
+	public Boolean getState(Options opt)
 	{
 		if(opt == LUX_ENABLE_LIGHTING)
 			return ConfigCL.enableColoredLighting;
+
+		if(opt == LUX_PACKS)
+			return null;
 
 		return false;
 	}
@@ -552,6 +581,11 @@ public class ClientProxy
 			ConfigCL.enableColoredLighting = !ConfigCL.enableColoredLighting;
 			ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true).set(ConfigCL.enableColoredLighting);
 			ConfigCL.cfgs.save();
+		}
+
+		if(opt == LUX_PACKS)
+		{
+			Minecraft.getMinecraft().displayGuiScreen(new GuiScreenLuxPacks(Minecraft.getMinecraft().currentScreen));
 		}
 	}
 
@@ -646,25 +680,9 @@ public class ClientProxy
 	@Override
 	public void postInit()
 	{
-		((IReloadableResourceManager) Minecraft.getMinecraft().getResourceManager()).registerReloadListener(this);
 		JsonBlockLights.reload();
-		ForgeRegistries.BLOCKS.getValuesCollection().stream() //
-				.filter(Predicates.instanceOf(IGlowingBlock.class)) //
-				.forEach(blk ->
-				{
-					IGlowingBlock glow = (IGlowingBlock) blk;
-					LuxManager.registerBlockLight(blk, (world, pos, state, event) -> event.add(glow.produceColoredLight(world, pos, state, 1F)));
-				});
-	}
-
-	@Override
-	public void onResourceManagerReload(IResourceManager resourceManager, Predicate<IResourceType> resourcePredicate)
-	{
-		if(resourcePredicate.test(VanillaResourceType.SHADERS))
-		{
-//			terrainProgram = new SmartShaderProgram(new ResourceLocation("lux", "terrain"), resourceManager, new SmartShaderVariables(LIGHT_COUNT));
-//			entityProgram = new SmartShaderProgram(new ResourceLocation("lux", "entities"), resourceManager, new SmartShaderVariables(LIGHT_COUNT));
-		}
+		JsonEntityLights.reload();
+		LuxManager.reload();
 	}
 
 	@SubscribeEvent

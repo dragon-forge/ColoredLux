@@ -37,10 +37,12 @@ void main()
 	baseColor = baseColor * vec4(mix(vec3(1), worldTint, worldTintIntensity), 1.0f);
 
 	baseColor = baseColor * vec4(lightdark, 1);
+
 	float dist = max(gl_FragCoord.z / gl_FragCoord.w - gl_Fog.start, 0.0f);
 	float fog = gl_Fog.density * dist * gl_Fog.density;
 	fog = 1.0f - clamp(fog, 0.0f, 1.0f);
-	baseColor = vec4(mix(vec3(gl_Fog.color), baseColor.rgb, fog).rgb, baseColor.a);
+	// baseColor = vec4(mix(vec3(gl_Fog.color), baseColor.rgb, fog).rgb, baseColor.a);
+
 	vec4 amult = vec4(vec3(1) * (1 - colorMult.a) + colorMult.rgb * colorMult.a, 1);
 	gl_FragColor = baseColor * amult;
 	// gl_FragColor = vec4(mix(baseColor.rgb * lightdark, baseColor.rgb * lcolor.rgb, intens), baseColor.a);

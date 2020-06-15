@@ -12,10 +12,13 @@ import com.zeitheron.hammercore.utils.math.ExpressionEvaluator;
 import com.zeitheron.hammercore.utils.math.functions.ExpressionFunction;
 import com.zeitheron.lux.api.LuxManager;
 import com.zeitheron.lux.api.event.GatherLightsEvent;
+import com.zeitheron.lux.api.event.ReloadLuxManagerEvent;
 import com.zeitheron.lux.api.light.ILightEntityHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
@@ -28,6 +31,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+@Mod.EventBusSubscriber
 public class JsonEntityLights
 {
 	static File file;
@@ -55,41 +59,47 @@ public class JsonEntityLights
 		if(file == null)
 			return;
 
-		if(!handlers.isEmpty())
-		{
-			handlers.keySet().forEach(LuxManager.ENTITY_LUMINANCES::remove);
-			handlers.clear();
-		}
+		handlers.clear();
 
 		try(FileInputStream in = new FileInputStream(file))
 		{
 			JSONObject root = (JSONObject) new JSONTokener(new String(IOUtils.pipeOut(in))).nextValue();
-
-			for(String key : root.keySet())
-			{
-				if(key.startsWith("#"))
-					continue;
-				EntityEntry blk = ForgeRegistries.ENTITIES.getValue(new ResourceLocation(key));
-				if(blk != null)
-				{
-					Object o = root.get(key);
-					List<JSONObject> lights = new ArrayList<>();
-					if(o instanceof JSONArray)
-					{
-						JSONArray a = (JSONArray) o;
-						for(int i = 0; i < a.length(); ++i)
-							lights.add(a.getJSONObject(i));
-					} else if(o instanceof JSONObject)
-						lights.add((JSONObject) o);
-					handlers.put(blk, new PresetLightEntityHandler(lights.stream().map(ParsedLight::new).collect(Collectors.toList())));
-				}
-			}
+			handlers.putAll(parse(root));
 		} catch(IOException | JSONException ioe)
 		{
 			ioe.printStackTrace();
 		}
+	}
 
+	@SubscribeEvent
+	public static void reloadLuxManager(ReloadLuxManagerEvent e)
+	{
 		handlers.forEach(LuxManager.ENTITY_LUMINANCES::put);
+	}
+
+	public static Map<EntityEntry, ILightEntityHandler> parse(JSONObject root)
+	{
+		Map<EntityEntry, ILightEntityHandler> h = new HashMap<>();
+		for(String key : root.keySet())
+		{
+			if(key.startsWith("#"))
+				continue;
+			EntityEntry blk = ForgeRegistries.ENTITIES.getValue(new ResourceLocation(key));
+			if(blk != null)
+			{
+				Object o = root.get(key);
+				List<JSONObject> lights = new ArrayList<>();
+				if(o instanceof JSONArray)
+				{
+					JSONArray a = (JSONArray) o;
+					for(int i = 0; i < a.length(); ++i)
+						lights.add(a.getJSONObject(i));
+				} else if(o instanceof JSONObject)
+					lights.add((JSONObject) o);
+				h.put(blk, new PresetLightEntityHandler(lights.stream().map(ParsedLight::new).collect(Collectors.toList())));
+			}
+		}
+		return h;
 	}
 
 	public static class ParsedLight

@@ -4,7 +4,7 @@ import com.zeitheron.hammercore.cfg.HCModConfigurations;
 import com.zeitheron.hammercore.cfg.IConfigReloadListener;
 import com.zeitheron.hammercore.cfg.fields.ModConfigPropertyBool;
 import com.zeitheron.hammercore.cfg.fields.ModConfigPropertyInt;
-import com.zeitheron.lux.client.json.JsonBlockLights;
+import com.zeitheron.lux.api.LuxManager;
 import net.minecraftforge.common.config.Configuration;
 
 @HCModConfigurations(modid = "lux", isModule = true, module = "main")
@@ -34,7 +34,7 @@ public class ConfigCL
 	@Override
 	public void reloadCustom(Configuration cfgs)
 	{
-		JsonBlockLights.reload();
+		LuxManager.reload();
 		ConfigCL.cfgs = cfgs;
 	}
 }

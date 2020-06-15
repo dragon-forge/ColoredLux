@@ -39,10 +39,12 @@ void main()
 
 	baseColor = baseColor * vec4(lightdark, 1);
 	vec3 dv = position - playerPos;
+
 	float dist = max(sqrt(dv.x * dv.x + dv.y * dv.y + dv.z * dv.z) - gl_Fog.start, 0.0f) / (gl_Fog.end - gl_Fog.start);
 	float fog = gl_Fog.density * dist;
 	fog = 1.0f - clamp(fog, 0.0f, 1.0f);
-	baseColor = vec4(mix(vec3(gl_Fog.color), baseColor.xyz, fog).rgb, baseColor.a);
+	// baseColor = vec4(mix(vec3(gl_Fog.color), baseColor.xyz, fog).rgb, baseColor.a);
+
 	gl_FragColor = baseColor;
 	// gl_FragColor = vec4(max(mix(baseColor.rgb * lightdark, baseColor.rgb * lcolor.rgb, intens), lightdark * baseColor.rgb), baseColor.a);
 }
