@@ -15,7 +15,7 @@ public class LuxPackAPIv1
 	{
 		MinecraftForge.EVENT_BUS.register(this);
 	}
-
+	
 	@SubscribeEvent
 	public void reloadLux(ReloadLuxManagerEvent e)
 	{
@@ -25,15 +25,15 @@ public class LuxPackAPIv1
 			LuxManager.ENTITY_LUMINANCES.putAll(pack.getEntityLights());
 		}
 	}
-
-	final List<AbstractLuxPack> packs = new ArrayList<>();
-
+	
+	protected final List<AbstractLuxPack> packs = new ArrayList<>();
+	
 	@Override
 	public void hookLuxPack(AbstractLuxPack pack)
 	{
 		packs.add(pack);
 	}
-
+	
 	@Override
 	public void unhookLuxPack(AbstractLuxPack pack)
 	{

@@ -29,7 +29,14 @@ public class ZipLuxPack
 		if(ze == null || ze.isDirectory()) return null;
 		return zip.getInputStream(ze);
 	}
-
+	
+	@Override
+	public boolean doesFileExist(String path)
+	{
+		ZipEntry ze = zip.getEntry(path);
+		return ze != null && !ze.isDirectory();
+	}
+	
 	@Override
 	public void close() throws IOException
 	{

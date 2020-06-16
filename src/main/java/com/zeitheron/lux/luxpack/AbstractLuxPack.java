@@ -1,6 +1,8 @@
 package com.zeitheron.lux.luxpack;
 
+import com.zeitheron.hammercore.lib.nashorn.JSSource;
 import com.zeitheron.hammercore.lib.zlib.error.JSONException;
+import com.zeitheron.hammercore.lib.zlib.io.IOUtils;
 import com.zeitheron.hammercore.lib.zlib.json.JSONObject;
 import com.zeitheron.hammercore.lib.zlib.json.JSONTokener;
 import com.zeitheron.lux.ColoredLux;
@@ -26,28 +28,28 @@ public abstract class AbstractLuxPack
 {
 	public final File location;
 	private ILuxPackAPI api;
-
+	
 	public AbstractLuxPack(File location) throws IOException
 	{
 		if(!location.exists()) throw new FileNotFoundException(location.getAbsolutePath());
 		this.location = location;
 	}
-
+	
 	public static AbstractLuxPack decode(File location)
 	{
 		AbstractLuxPack pack = null;
-
+		
 		try
 		{
 			if(location.isDirectory()) pack = new FileLuxPack(location);
-
+			
 			if(location.isFile() && (location.getName().endsWith(".zip") || location.getName().endsWith(".lux")))
 				pack = new ZipLuxPack(location);
 		} catch(IOException e)
 		{
 			e.printStackTrace();
 		}
-
+		
 		if(pack == null)
 		{
 			// Let anyone have their respective pack decoders
@@ -55,13 +57,13 @@ public abstract class AbstractLuxPack
 			MinecraftForge.EVENT_BUS.post(event);
 			pack = event.getPack();
 		}
-
+		
 		if(pack != null && pack.getPackMeta() == null)
 			pack = null;
-
+		
 		return pack;
 	}
-
+	
 	/**
 	 * Returns an input created from the pack.
 	 *
@@ -69,9 +71,36 @@ public abstract class AbstractLuxPack
 	 * @return input steam with data, or null, if path does not point to a valid file.
 	 */
 	public abstract InputStream createInput(String path) throws IOException;
-
+	
+	public abstract boolean doesFileExist(String path);
+	
 	protected LuxPackMeta meta;
-
+	
+	public JSSource createJSSource(String path)
+	{
+		return new JSSource()
+		{
+			@Override
+			public String read()
+			{
+				byte[] data = new byte[0];
+				try(InputStream in = createInput(path))
+				{
+					if(in != null) data = IOUtils.pipeOut(in);
+				} catch(IOException ignored)
+				{
+				}
+				return new String(data);
+			}
+			
+			@Override
+			public boolean exists()
+			{
+				return doesFileExist(path);
+			}
+		};
+	}
+	
 	protected void loadPackMeta() throws IOException, JSONException
 	{
 		try(InputStream in = createInput("pack.json"))
@@ -87,7 +116,7 @@ public abstract class AbstractLuxPack
 			}
 		}
 	}
-
+	
 	public LuxPackMeta getPackMeta()
 	{
 		if(meta == null)
@@ -101,14 +130,14 @@ public abstract class AbstractLuxPack
 				e.printStackTrace();
 			}
 		}
-
+		
 		return meta;
 	}
-
+	
 	boolean loadBlockLights = true, loadEntityLights = true;
 	Map<Block, ILightBlockHandler> loadedBlockLights = Collections.emptyMap();
 	Map<EntityEntry, ILightEntityHandler> loadedEntityLights = Collections.emptyMap();
-
+	
 	public Map<Block, ILightBlockHandler> getBlockLights()
 	{
 		if(loadBlockLights)
@@ -129,7 +158,7 @@ public abstract class AbstractLuxPack
 		}
 		return loadedBlockLights;
 	}
-
+	
 	public Map<EntityEntry, ILightEntityHandler> getEntityLights()
 	{
 		if(loadEntityLights)
@@ -150,25 +179,25 @@ public abstract class AbstractLuxPack
 		}
 		return loadedEntityLights;
 	}
-
+	
 	protected String getLuxPackName()
 	{
 		LuxPackMeta meta = getPackMeta();
 		return meta != null ? meta.name : location.getName();
 	}
-
+	
 	public void enable()
 	{
 		if(api != null)
 			api.hookLuxPack(this);
 	}
-
+	
 	public void disable()
 	{
 		if(api != null)
 			api.unhookLuxPack(this);
 	}
-
+	
 	/**
 	 * Reads a pack icon to display in lux pack list.
 	 *
@@ -190,5 +219,13 @@ public abstract class AbstractLuxPack
 		{
 			return ImageIO.read(in2);
 		}
+	}
+	
+	@Override
+	public String toString()
+	{
+		return "AbstractLuxPack{" +
+				"location=" + location +
+				'}';
 	}
 }
