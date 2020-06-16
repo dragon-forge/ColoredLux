@@ -1,7 +1,6 @@
 package com.zeitheron.lux.luxpack.apis;
 
 import com.zeitheron.hammercore.api.lighting.ColoredLight;
-import com.zeitheron.hammercore.lib.nashorn.JSScript;
 import com.zeitheron.hammercore.lib.nashorn.JSSource;
 import com.zeitheron.hammercore.utils.java.itf.QuadConsumer;
 import com.zeitheron.hammercore.utils.java.itf.TriConsumer;
@@ -32,6 +31,7 @@ import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 public class LuxPackAPIv2 extends LuxPackAPIv1
 {
@@ -133,17 +133,9 @@ public class LuxPackAPIv2 extends LuxPackAPIv1
 			
 			try
 			{
-				JSWorld jsw = new JSWorld(world);
-				Object returned = JSScript.toJava(root.invokeFunction("light", jsw, entity));
-				if(returned instanceof ColoredLight)
-				{
-					c.accept((ColoredLight) returned);
-				} else if(returned instanceof ColoredLight.Builder)
-				{
-					ColoredLight.Builder b = (ColoredLight.Builder) returned;
-					b.pos(entity, Minecraft.getMinecraft().getRenderPartialTicks());
-					c.accept(b.build());
-				}
+				TScriptJSInternal.context = new TLightContext(c, b -> b.pos(entity, Minecraft.getMinecraft().getRenderPartialTicks()).build());
+				root.invokeFunction("light", new JSWorld(world), entity);
+				TScriptJSInternal.context = null;
 			} catch(Throwable err)
 			{
 				ColoredLux.LOG.error("Error in script " + path + "!", err);
@@ -173,18 +165,9 @@ public class LuxPackAPIv2 extends LuxPackAPIv1
 			
 			try
 			{
-				JSWorld jsw = new JSWorld(world);
-				JSBlockPos jspos = new JSBlockPos(pos);
-				Object returned = JSScript.toJava(root.invokeFunction("light", jsw, jspos, tile));
-				if(returned instanceof ColoredLight)
-				{
-					c.accept((ColoredLight) returned);
-				} else if(returned instanceof ColoredLight.Builder)
-				{
-					ColoredLight.Builder b = (ColoredLight.Builder) returned;
-					b.pos(pos);
-					c.accept(b.build());
-				}
+				TScriptJSInternal.context = new TLightContext(c, b -> b.pos(pos).build());
+				root.invokeFunction("light", new JSWorld(world), new JSBlockPos(pos), tile);
+				TScriptJSInternal.context = null;
 			} catch(Throwable err)
 			{
 				ColoredLux.LOG.error("Error in script " + path + "!", err);
@@ -195,8 +178,42 @@ public class LuxPackAPIv2 extends LuxPackAPIv1
 		}
 	}
 	
+	public static class TLightContext
+	{
+		final Consumer<ColoredLight> thePipe;
+		final Function<ColoredLight.Builder, ColoredLight> finisher;
+		
+		public TLightContext(Consumer<ColoredLight> thePipe, Function<ColoredLight.Builder, ColoredLight> finisher)
+		{
+			this.thePipe = thePipe;
+			this.finisher = finisher;
+		}
+		
+		public void add(ColoredLight light)
+		{
+			thePipe.accept(light);
+		}
+		
+		public void add(ColoredLight.Builder light)
+		{
+			add(finisher.apply(light));
+		}
+	}
+	
 	public static class TScriptJSInternal
 	{
+		public static TLightContext context;
+		
+		public static void add(ColoredLight light)
+		{
+			if(context != null) context.add(light);
+		}
+		
+		public static void add(ColoredLight.Builder light)
+		{
+			if(context != null) context.add(light);
+		}
+		
 		public static double interp(double prev, double cur)
 		{
 			float pt = Minecraft.getMinecraft().getRenderPartialTicks();
