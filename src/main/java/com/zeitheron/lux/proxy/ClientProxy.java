@@ -10,6 +10,7 @@ import com.zeitheron.hammercore.client.utils.gl.shading.VariableShaderProgram;
 import com.zeitheron.hammercore.utils.ReflectionUtil;
 import com.zeitheron.lux.ColoredLux;
 import com.zeitheron.lux.ConfigCL;
+import com.zeitheron.lux.api.HWSupport;
 import com.zeitheron.lux.api.LuxManager;
 import com.zeitheron.lux.api.event.CalculateFogIntensityEvent;
 import com.zeitheron.lux.api.light.ILightBlockHandler;
@@ -93,10 +94,17 @@ public class ClientProxy
 	public static final List<Options> customOptions = new ArrayList<>();
 	public static final Options LUX_ENABLE_LIGHTING = EnumHelperClient.addOptions("LUX_ENABLE_LIGHTING", "options.lux:lighting", false, true);
 	public static final Options LUX_PACKS = EnumHelperClient.addOptions("LUX_LUXPACKS", "options.lux:packs", false, true);
+	public static final String GPU;
+	
+	static
+	{
+		GPU = "???" + File.separator + "???";
+	}
 	
 	@Override
 	public void preInit(FMLPreInitializationEvent e)
 	{
+		ReflectionUtil.setStaticFinalField(ClientProxy.class, "GPU", GL11.glGetString(GL11.GL_RENDERER));
 		ProfilerEndStartEvent.enable();
 		RenderEntityEvent.enable();
 		RenderTileEntityEvent.enable();
@@ -193,11 +201,20 @@ public class ClientProxy
 		
 		ClientCommandHandler.instance.registerCommand(new CommandLux());
 		
+		HWSupport.EnumShaderVersion shaderVersionEnum = HWSupport.getShaderVersionToLoad(GPU);
+		String shaderVersion = shaderVersionEnum.getId();
+		String shaders = "shaders/" + shaderVersion + "/";
+		
+		ColoredLux.LOG.info("----------------- Colored Lux Info -----------------");
+		ColoredLux.LOG.info("Using shaders at: " + shaders);
+		ColoredLux.LOG.info("Vendor compat: " + HWSupport.getCardCompatMessage(GPU));
+		ColoredLux.LOG.info("----------------------------------------------------");
+		
 		ClientProxy.terrainProgram = new VariableShaderProgram()
 				.id(new ResourceLocation("lux", "terrain"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
-				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", "shaders/terrain.fsh")))
-				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", "shaders/terrain.vsh")))
+				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", shaders + "terrain.fsh")))
+				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", shaders + "terrain.vsh")))
 				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE)
 				.onCompilationFailed(prog ->
 				{
@@ -210,8 +227,8 @@ public class ClientProxy
 		ClientProxy.entityProgram = new VariableShaderProgram()
 				.id(new ResourceLocation("lux", "entity"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
-				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", "shaders/entities.fsh")))
-				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", "shaders/entities.vsh")))
+				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", shaders + "entities.fsh")))
+				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", shaders + "entities.vsh")))
 				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE)
 				.onCompilationFailed(prog ->
 				{
@@ -240,7 +257,6 @@ public class ClientProxy
 		lights.addAll(ClientLightManager.lights);
 		ColoredLightManager.LAST_LIGHTS = lights.size();
 	}
-	
 	
 	public static boolean OptifineInstalled = false;
 	public static Class GuiPerformanceSettingsOF, GuiButtonOF, GuiSliderOF;
