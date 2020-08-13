@@ -95,12 +95,12 @@ public class ClientProxy
 	public static final Options LUX_ENABLE_LIGHTING = EnumHelperClient.addOptions("LUX_ENABLE_LIGHTING", "options.lux:lighting", false, true);
 	public static final Options LUX_PACKS = EnumHelperClient.addOptions("LUX_LUXPACKS", "options.lux:packs", false, true);
 	public static final String GPU;
-	
+
 	static
 	{
 		GPU = "???" + File.separator + "???";
 	}
-	
+
 	@Override
 	public void preInit(FMLPreInitializationEvent e)
 	{
@@ -111,12 +111,12 @@ public class ClientProxy
 		PreRenderChunkEvent.enable();
 		MinecraftForge.EVENT_BUS.register(this);
 		ColoredLightManager.UNIFORM_LIGHT_COUNT = UNIF_LIGHTS;
-		
+
 		ColoredLux.LOG.info("Found " + runtimeCores + " available processing threads. The light update frequency will be max(FPS/" + lightTPSDivisor + ", 1) Hz");
-		
+
 		customOptions.add(LUX_ENABLE_LIGHTING);
 		customOptions.add(LUX_PACKS);
-		
+
 		if(OptifineInstalled) for(Field f : GuiPerformanceSettingsOF.getDeclaredFields())
 			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers())) try
 			{
@@ -144,19 +144,19 @@ public class ClientProxy
 			{
 				e1.printStackTrace();
 			}
-		
+
 		File cfg = e.getSuggestedConfigurationFile();
 		cfg = new File(cfg.getAbsolutePath().substring(0, cfg.getAbsolutePath().lastIndexOf(".")));
 		if(!cfg.isDirectory())
 			cfg.mkdirs();
-		
+
 		File old = new File(cfg, "lights.json");
 		if(old.isFile())
 			old.renameTo(new File(cfg, "lights-block.json"));
 		JsonBlockLights.setup(new File(cfg, "lights-block.json"));
 		JsonEntityLights.setup(new File(cfg, "lights-entity.json"));
 		LuxPackRepository.getInstance().setup(new File(cfg, "luxpacks.json"));
-		
+
 		ColoredLightManager.registerOperator(() -> ConfigCL.enableColoredLighting, () ->
 		{
 			if(ConfigCL.enableColoredLighting)
@@ -198,18 +198,18 @@ public class ClientProxy
 			}
 			return false;
 		});
-		
+
 		ClientCommandHandler.instance.registerCommand(new CommandLux());
-		
+
 		HWSupport.EnumShaderVersion shaderVersionEnum = HWSupport.getShaderVersionToLoad(GPU);
 		String shaderVersion = shaderVersionEnum.getId();
 		String shaders = "shaders/" + shaderVersion + "/";
-		
+
 		ColoredLux.LOG.info("----------------- Colored Lux Info -----------------");
 		ColoredLux.LOG.info("Using shaders at: " + shaders);
 		ColoredLux.LOG.info("Vendor compat: " + HWSupport.getCardCompatMessage(GPU));
 		ColoredLux.LOG.info("----------------------------------------------------");
-		
+
 		ClientProxy.terrainProgram = new VariableShaderProgram()
 				.id(new ResourceLocation("lux", "terrain"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
@@ -223,7 +223,7 @@ public class ClientProxy
 				})
 				.doGLLog(false)
 				.subscribe4Events();
-		
+
 		ClientProxy.entityProgram = new VariableShaderProgram()
 				.id(new ResourceLocation("lux", "entity"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
@@ -238,7 +238,7 @@ public class ClientProxy
 				.doGLLog(false)
 				.subscribe4Events();
 	}
-	
+
 	@Override
 	public void reloadLuxManager()
 	{
@@ -246,9 +246,9 @@ public class ClientProxy
 		EXISTING_ENTS.clear();
 		LuxPackRepository.getInstance().reload();
 	}
-	
+
 	public static final List<ColoredLight> lights = new ArrayList<>();
-	
+
 	@SubscribeEvent
 	@SideOnly(Side.CLIENT)
 	public void lightUpload(LightUniformEvent e)
@@ -257,10 +257,10 @@ public class ClientProxy
 		lights.addAll(ClientLightManager.lights);
 		ColoredLightManager.LAST_LIGHTS = lights.size();
 	}
-	
+
 	public static boolean OptifineInstalled = false;
 	public static Class GuiPerformanceSettingsOF, GuiButtonOF, GuiSliderOF;
-	
+
 	static
 	{
 		try
@@ -273,15 +273,15 @@ public class ClientProxy
 		{
 		}
 	}
-	
+
 	public static ThreadTimer searchTimer = new ThreadTimer(60F);
 	public static long luxCalcTimeMS;
-	
+
 	public void startThread()
 	{
 		// No need to start more threads
 		if(thread != null && thread.isAlive()) return;
-		
+
 		thread = SidedThreadGroups.CLIENT.newThread(() ->
 		{
 			while(!thread.isInterrupted())
@@ -308,7 +308,7 @@ public class ClientProxy
 		thread.setName("ColoredLuxLightSearch");
 		thread.start();
 	}
-	
+
 	private static void searchLoop()
 	{
 		// DO NOT loop for blocks while lighting disabled.
@@ -318,7 +318,7 @@ public class ClientProxy
 			EXISTING_ENTS.clear();
 			return;
 		}
-		
+
 		if(Minecraft.getMinecraft().player == null) return;
 		EntityPlayer player = Minecraft.getMinecraft().player;
 		World reader;
@@ -361,7 +361,7 @@ public class ClientProxy
 			}
 		}
 	}
-	
+
 	@Override
 	public void postInit()
 	{
@@ -369,7 +369,7 @@ public class ClientProxy
 		JsonEntityLights.reload();
 		LuxManager.reload();
 	}
-	
+
 	@SubscribeEvent
 	public void onProfilerChange(ProfilerEndStartEvent event)
 	{
@@ -380,16 +380,16 @@ public class ClientProxy
 			{
 				float pt = Minecraft.getMinecraft().getRenderPartialTicks();
 				EntityPlayer player = Minecraft.getMinecraft().player;
-				
+
 				float playerX = 0, playerY = 0, playerZ = 0;
-				
+
 				if(player != null)
 				{
 					playerX = (float) (player.prevPosX + (player.posX - player.prevPosX) * pt);
 					playerY = (float) (player.prevPosZ + (player.posY - player.prevPosY) * pt);
 					playerZ = (float) (player.prevPosZ + (player.posZ - player.prevPosZ) * pt);
 				}
-				
+
 				isGui = false;
 				precedesEntities = true;
 				terrainProgram.bindShader();
@@ -397,12 +397,14 @@ public class ClientProxy
 				terrainProgram.setUniform("sampler", 0);
 				terrainProgram.setUniform("lightmap", 1);
 				terrainProgram.setUniform("playerPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
-				
+
 				float wtR = WorldTintHandler.tintRed, wtG = WorldTintHandler.tintGreen, wtB = WorldTintHandler.tintBlue, wtInt = WorldTintHandler.tintIntensity;
-				
+				float saturation = WorldTintHandler.saturation;
+
 				terrainProgram.setUniform("worldTint", wtR, wtG, wtB);
 				terrainProgram.setUniform("worldTintIntensity", wtInt);
-				
+				terrainProgram.setUniform("saturation", saturation);
+
 				if(!postedLights)
 				{
 					if(thread == null || !thread.isAlive())
@@ -420,6 +422,7 @@ public class ClientProxy
 					entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
 					entityProgram.setUniform("worldTint", wtR, wtG, wtB);
 					entityProgram.setUniform("worldTintIntensity", wtInt);
+					entityProgram.setUniform("saturation", saturation);
 					entityProgram.setUniform("lightingEnabled", GL11.glIsEnabled(GL11.GL_LIGHTING));
 					terrainProgram.bindShader();
 					postedLights = true;
@@ -503,7 +506,7 @@ public class ClientProxy
 			}
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void clientTick(ClientTickEvent e)
 	{
@@ -516,7 +519,7 @@ public class ClientProxy
 			searchTimer.setTPS(Math.max(Minecraft.getDebugFPS() / lightTPSDivisor, 1));
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void renderEntity(RenderEntityEvent e)
 	{
@@ -539,7 +542,7 @@ public class ClientProxy
 			}
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void renderTileEntity(RenderTileEntityEvent e)
 	{
@@ -556,7 +559,7 @@ public class ClientProxy
 			}
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void preRenderChunk(PreRenderChunkEvent e)
 	{
@@ -568,7 +571,7 @@ public class ClientProxy
 			terrainProgram.setUniform("chunkZ", pos.getZ());
 		}
 	}
-	
+
 	@SubscribeEvent
 	public void renderLast(RenderWorldLastEvent e)
 	{
@@ -579,16 +582,16 @@ public class ClientProxy
 			GL20.glUseProgram(0);
 		}
 	}
-	
+
 	public static boolean renderF3;
-	
+
 	@SubscribeEvent(priority = EventPriority.HIGHEST)
 	public void addF3Info(RenderGameOverlayEvent.Pre event)
 	{
 		if(event.getType() == ElementType.DEBUG)
 			renderF3 = true;
 	}
-	
+
 	@SubscribeEvent(priority = EventPriority.HIGHEST)
 	public void addF3Info(RenderGameOverlayEvent.Text f3)
 	{
@@ -603,9 +606,9 @@ public class ClientProxy
 			renderF3 = false;
 		}
 	}
-	
+
 	public static final BUD INSTANCE = new BUD();
-	
+
 	public static class BUD
 			implements IWorldEventListener
 	{
@@ -620,57 +623,57 @@ public class ClientProxy
 			} else
 				EXISTING.remove(pos);
 		}
-		
+
 		@Override
 		public void notifyLightSet(BlockPos pos)
 		{
 		}
-		
+
 		@Override
 		public void markBlockRangeForRenderUpdate(int x1, int y1, int z1, int x2, int y2, int z2)
 		{
 		}
-		
+
 		@Override
 		public void playSoundToAllNearExcept(EntityPlayer player, SoundEvent soundIn, SoundCategory category, double x, double y, double z, float volume, float pitch)
 		{
 		}
-		
+
 		@Override
 		public void playRecord(SoundEvent soundIn, BlockPos pos)
 		{
 		}
-		
+
 		@Override
 		public void spawnParticle(int particleID, boolean ignoreRange, double xCoord, double yCoord, double zCoord, double xSpeed, double ySpeed, double zSpeed, int... parameters)
 		{
 		}
-		
+
 		@Override
 		public void spawnParticle(int id, boolean ignoreRange, boolean minimiseParticleLevel, double x, double y, double z, double xSpeed, double ySpeed, double zSpeed, int... parameters)
 		{
 		}
-		
+
 		@Override
 		public void onEntityAdded(Entity entityIn)
 		{
 		}
-		
+
 		@Override
 		public void onEntityRemoved(Entity entityIn)
 		{
 		}
-		
+
 		@Override
 		public void broadcastSound(int soundID, BlockPos pos, int data)
 		{
 		}
-		
+
 		@Override
 		public void playEvent(EntityPlayer player, int type, BlockPos blockPosIn, int data)
 		{
 		}
-		
+
 		@Override
 		public void sendBlockBreakProgress(int breakerId, BlockPos pos, int progress)
 		{
