@@ -376,133 +376,120 @@ public class ClientProxy
 		section = event.getSection();
 		if(ConfigCL.enableColoredLighting)
 		{
-			if(event.getSection().compareTo("terrain") == 0)
+			EntityPlayer player = Minecraft.getMinecraft().player;
+
+			switch(event.getSection())
 			{
-				float pt = Minecraft.getMinecraft().getRenderPartialTicks();
-				EntityPlayer player = Minecraft.getMinecraft().player;
+				case "terrain":
+					float pt = Minecraft.getMinecraft().getRenderPartialTicks();
 
-				float playerX = 0, playerY = 0, playerZ = 0;
+					float playerX = 0, playerY = 0, playerZ = 0;
 
-				if(player != null)
-				{
-					playerX = (float) (player.prevPosX + (player.posX - player.prevPosX) * pt);
-					playerY = (float) (player.prevPosZ + (player.posY - player.prevPosY) * pt);
-					playerZ = (float) (player.prevPosZ + (player.posZ - player.prevPosZ) * pt);
-				}
+					if(player != null)
+					{
+						playerX = (float) (player.prevPosX + (player.posX - player.prevPosX) * pt);
+						playerY = (float) (player.prevPosZ + (player.posY - player.prevPosY) * pt);
+						playerZ = (float) (player.prevPosZ + (player.posZ - player.prevPosZ) * pt);
+					}
 
-				isGui = false;
-				precedesEntities = true;
-				terrainProgram.bindShader();
-				terrainProgram.setUniform("ticks", ticks + pt);
-				terrainProgram.setUniform("sampler", 0);
-				terrainProgram.setUniform("lightmap", 1);
-				terrainProgram.setUniform("playerPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
+					isGui = false;
+					precedesEntities = true;
+					terrainProgram.bindShader();
+					terrainProgram.setUniform("ticks", ticks + pt);
+					terrainProgram.setUniform("sampler", 0);
+					terrainProgram.setUniform("lightmap", 1);
+					terrainProgram.setUniform("playerPos", playerX, playerY, playerZ);
 
-				float wtR = WorldTintHandler.tintRed, wtG = WorldTintHandler.tintGreen, wtB = WorldTintHandler.tintBlue, wtInt = WorldTintHandler.tintIntensity;
-				float saturation = WorldTintHandler.saturation;
+					float wtR = WorldTintHandler.tintRed, wtG = WorldTintHandler.tintGreen, wtB = WorldTintHandler.tintBlue, wtInt = WorldTintHandler.tintIntensity;
+					float saturation = WorldTintHandler.saturation;
 
-				terrainProgram.setUniform("worldTint", wtR, wtG, wtB);
-				terrainProgram.setUniform("worldTintIntensity", wtInt);
-				terrainProgram.setUniform("saturation", saturation);
+					terrainProgram.setUniform("worldTint", wtR, wtG, wtB);
+					terrainProgram.setUniform("worldTintIntensity", wtInt);
+					terrainProgram.setUniform("saturation", saturation);
 
-				if(!postedLights)
-				{
-					if(thread == null || !thread.isAlive())
-						startThread();
-					ClientLightManager.update(Minecraft.getMinecraft().world);
+					if(!postedLights)
+					{
+						if(thread == null || !thread.isAlive())
+							startThread();
+						ClientLightManager.update(Minecraft.getMinecraft().world);
+						GL20.glUseProgram(0);
+						MinecraftForge.EVENT_BUS.post(new LightUniformEvent(ClientLightManager.lights));
+						terrainProgram.bindShader();
+						ClientLightManager.uploadLightsUBO();
+						entityProgram.bindShader();
+						entityProgram.setUniform("ticks", ticks + Minecraft.getMinecraft().getRenderPartialTicks());
+						entityProgram.setUniform("sampler", 0);
+						entityProgram.setUniform("lightmap", 1);
+						ClientLightManager.uploadLightsUBO();
+						entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
+						entityProgram.setUniform("worldTint", wtR, wtG, wtB);
+						entityProgram.setUniform("worldTintIntensity", wtInt);
+						entityProgram.setUniform("saturation", saturation);
+						entityProgram.setUniform("lightingEnabled", GL11.glIsEnabled(GL11.GL_LIGHTING));
+						terrainProgram.bindShader();
+						postedLights = true;
+						ClientLightManager.clear();
+					}
+					break;
+				case "litParticles":
+					terrainProgram.bindShader();
+					terrainProgram.setUniform("sampler", 0);
+					terrainProgram.setUniform("lightmap", 1);
+					if(player != null)
+						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+					terrainProgram.setUniform("chunkX", 0);
+					terrainProgram.setUniform("chunkY", 0);
+					terrainProgram.setUniform("chunkZ", 0);
+					break;
+				case "particles":
+					entityProgram.bindShader();
+					if(player != null)
+						entityProgram.setUniform("entityPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+					entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
+					break;
+				case "entities":
+					if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
+					{
+						entityProgram.bindShader();
+						entityProgram.setUniform("lightingEnabled", true);
+						World wld = Minecraft.getMinecraft().world;
+						CalculateFogIntensityEvent e = new CalculateFogIntensityEvent(wld, wld.provider.getDimensionType() == DimensionType.NETHER ? 0.015625f : 1.0f);
+						MinecraftForge.EVENT_BUS.post(e);
+						entityProgram.setUniform("fogIntensity", e.getValue());
+					}
+					break;
+				case "blockEntities":
+					if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
+					{
+						entityProgram.bindShader();
+						entityProgram.setUniform("lightingEnabled", true);
+					}
+					break;
+				case "translucent":
+					terrainProgram.bindShader();
+					terrainProgram.setUniform("sampler", 0);
+					terrainProgram.setUniform("lightmap", 1);
+					if(player != null)
+						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+					break;
+				case "hand":
+					entityProgram.bindShader();
+					if(player != null)
+						entityProgram.setUniform("entityPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+					entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
+					precedesEntities = true;
+					break;
+				case "sky":
+				case "weather":
+				case "outline":
+				case "aboveClouds":
+				case "destroyProgress":
 					GL20.glUseProgram(0);
-					MinecraftForge.EVENT_BUS.post(new LightUniformEvent(ClientLightManager.lights));
-					terrainProgram.bindShader();
-					ClientLightManager.uploadLightsUBO();
-					entityProgram.bindShader();
-					entityProgram.setUniform("ticks", ticks + Minecraft.getMinecraft().getRenderPartialTicks());
-					entityProgram.setUniform("sampler", 0);
-					entityProgram.setUniform("lightmap", 1);
-					ClientLightManager.uploadLightsUBO();
-					entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
-					entityProgram.setUniform("worldTint", wtR, wtG, wtB);
-					entityProgram.setUniform("worldTintIntensity", wtInt);
-					entityProgram.setUniform("saturation", saturation);
-					entityProgram.setUniform("lightingEnabled", GL11.glIsEnabled(GL11.GL_LIGHTING));
-					terrainProgram.bindShader();
-					postedLights = true;
-					ClientLightManager.clear();
-				}
-			}
-			if(event.getSection().compareTo("sky") == 0)
-			{
-				GL20.glUseProgram(0);
-			}
-			if(event.getSection().compareTo("litParticles") == 0)
-			{
-				terrainProgram.bindShader();
-				terrainProgram.setUniform("sampler", 0);
-				terrainProgram.setUniform("lightmap", 1);
-				terrainProgram.setUniform("playerPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
-				terrainProgram.setUniform("chunkX", 0);
-				terrainProgram.setUniform("chunkY", 0);
-				terrainProgram.setUniform("chunkZ", 0);
-			}
-			if(event.getSection().compareTo("particles") == 0)
-			{
-				entityProgram.bindShader();
-				entityProgram.setUniform("entityPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
-				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
-			}
-			if(event.getSection().compareTo("weather") == 0)
-			{
-				GL20.glUseProgram(0);
-			}
-			if(event.getSection().compareTo("entities") == 0)
-			{
-				if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
-				{
-					entityProgram.bindShader();
-					entityProgram.setUniform("lightingEnabled", true);
-					World wld = Minecraft.getMinecraft().world;
-					CalculateFogIntensityEvent e = new CalculateFogIntensityEvent(wld, wld.provider.getDimensionType() == DimensionType.NETHER ? 0.015625f : 1.0f);
-					MinecraftForge.EVENT_BUS.post(e);
-					entityProgram.setUniform("fogIntensity", e.getValue());
-				}
-			}
-			if(event.getSection().compareTo("blockEntities") == 0)
-			{
-				if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
-				{
-					entityProgram.bindShader();
-					entityProgram.setUniform("lightingEnabled", true);
-				}
-			}
-			if(event.getSection().compareTo("outline") == 0)
-			{
-				GL20.glUseProgram(0);
-			}
-			if(event.getSection().compareTo("aboveClouds") == 0)
-			{
-				GL20.glUseProgram(0);
-			}
-			if(event.getSection().compareTo("destroyProgress") == 0)
-			{
-				GL20.glUseProgram(0);
-			}
-			if(event.getSection().compareTo("translucent") == 0)
-			{
-				terrainProgram.bindShader();
-				terrainProgram.setUniform("sampler", 0);
-				terrainProgram.setUniform("lightmap", 1);
-				terrainProgram.setUniform("playerPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
-			}
-			if(event.getSection().compareTo("hand") == 0)
-			{
-				entityProgram.bindShader();
-				entityProgram.setUniform("entityPos", (float) Minecraft.getMinecraft().player.posX, (float) Minecraft.getMinecraft().player.posY, (float) Minecraft.getMinecraft().player.posZ);
-				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
-				precedesEntities = true;
-			}
-			if(event.getSection().compareTo("gui") == 0)
-			{
-				isGui = true;
-				GL20.glUseProgram(0);
+					break;
+				case "gui":
+					isGui = true;
+					GL20.glUseProgram(0);
+					break;
 			}
 		}
 	}

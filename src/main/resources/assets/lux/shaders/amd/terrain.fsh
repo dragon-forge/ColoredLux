@@ -14,12 +14,6 @@ uniform vec3 playerPos;
 uniform int colMix;
 uniform int vanillaTracing;
 
-float round(float f)
-{
-	if(fract(f) < 0.5f) return f - fract(f);
-	else return f + 1.0f - fract(f);
-}
-
 float luma(vec3 color)
 {
 	return dot(color, vec3(0.299, 0.587, 0.114));
