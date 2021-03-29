@@ -38,7 +38,6 @@ import net.minecraft.util.SoundEvent;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.text.TextFormatting;
-import net.minecraft.world.DimensionType;
 import net.minecraft.world.IWorldEventListener;
 import net.minecraft.world.World;
 import net.minecraftforge.client.ClientCommandHandler;
@@ -79,6 +78,7 @@ public class ClientProxy
 	static final int lightTPSDivisor = runtimeCores <= 4 ? 8 : runtimeCores <= 8 ? 4 : 2;
 	boolean postedLights = false;
 	boolean precedesEntities = true;
+	float fogIntensity;
 	String section = "";
 	Thread thread;
 	private static int maxSessionLights = 1;
@@ -93,6 +93,7 @@ public class ClientProxy
 	};
 	public static final List<Options> customOptions = new ArrayList<>();
 	public static final Options LUX_ENABLE_LIGHTING = EnumHelperClient.addOptions("LUX_ENABLE_LIGHTING", "options.lux:lighting", false, true);
+	public static final Options LUX_ENABLE_FOG = EnumHelperClient.addOptions("LUX_ENABLE_FOG", "options.lux:fog", false, true);
 	public static final Options LUX_PACKS = EnumHelperClient.addOptions("LUX_LUXPACKS", "options.lux:packs", false, true);
 	public static final String GPU;
 
@@ -116,6 +117,7 @@ public class ClientProxy
 
 		customOptions.add(LUX_ENABLE_LIGHTING);
 		customOptions.add(LUX_PACKS);
+		customOptions.add(LUX_ENABLE_FOG);
 
 		if(OptifineInstalled) for(Field f : GuiPerformanceSettingsOF.getDeclaredFields())
 			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers())) try
@@ -381,6 +383,7 @@ public class ClientProxy
 			switch(event.getSection())
 			{
 				case "terrain":
+				{
 					float pt = Minecraft.getMinecraft().getRenderPartialTicks();
 
 					float playerX = 0, playerY = 0, playerZ = 0;
@@ -406,6 +409,7 @@ public class ClientProxy
 					terrainProgram.setUniform("worldTint", wtR, wtG, wtB);
 					terrainProgram.setUniform("worldTintIntensity", wtInt);
 					terrainProgram.setUniform("saturation", saturation);
+					terrainProgram.setUniform("fogIntensity", fogIntensity);
 
 					if(!postedLights)
 					{
@@ -431,7 +435,9 @@ public class ClientProxy
 						ClientLightManager.clear();
 					}
 					break;
+				}
 				case "litParticles":
+				{
 					terrainProgram.bindShader();
 					terrainProgram.setUniform("sampler", 0);
 					terrainProgram.setUniform("lightmap", 1);
@@ -441,23 +447,25 @@ public class ClientProxy
 					terrainProgram.setUniform("chunkY", 0);
 					terrainProgram.setUniform("chunkZ", 0);
 					break;
+				}
 				case "particles":
+				{
 					entityProgram.bindShader();
 					if(player != null)
 						entityProgram.setUniform("entityPos", (float) player.posX, (float) player.posY, (float) player.posZ);
 					entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
 					break;
+				}
 				case "entities":
+				{
 					if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
 					{
 						entityProgram.bindShader();
 						entityProgram.setUniform("lightingEnabled", true);
-						World wld = Minecraft.getMinecraft().world;
-						CalculateFogIntensityEvent e = new CalculateFogIntensityEvent(wld, wld.provider.getDimensionType() == DimensionType.NETHER ? 0.015625f : 1.0f);
-						MinecraftForge.EVENT_BUS.post(e);
-						entityProgram.setUniform("fogIntensity", e.getValue());
+						entityProgram.setUniform("fogIntensity", fogIntensity);
 					}
 					break;
+				}
 				case "blockEntities":
 					if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
 					{
@@ -504,6 +512,8 @@ public class ClientProxy
 			if(wc != null && !wc.eventListeners.contains(INSTANCE))
 				wc.eventListeners.add(INSTANCE);
 			searchTimer.setTPS(Math.max(Minecraft.getDebugFPS() / lightTPSDivisor, 1));
+
+			entityProgram.onReload();
 		}
 	}
 
@@ -568,6 +578,17 @@ public class ClientProxy
 			GlStateManager.disableLighting();
 			GL20.glUseProgram(0);
 		}
+
+		World wld = Minecraft.getMinecraft().world;
+		if(wld != null)
+		{
+			if(ConfigCL.enableFog)
+			{
+				CalculateFogIntensityEvent e2 = new CalculateFogIntensityEvent(wld, 1F);
+				MinecraftForge.EVENT_BUS.post(e2);
+				fogIntensity = e2.getValue();
+			} else fogIntensity = 0;
+		} else fogIntensity = 1F;
 	}
 
 	public static boolean renderF3;

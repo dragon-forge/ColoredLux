@@ -3,6 +3,7 @@
 varying vec3 position;
 varying vec4 lcolor;
 varying float intens;
+varying float dist2Obj;
 
 uniform vec3 worldTint;
 uniform float worldTintIntensity;
@@ -13,6 +14,7 @@ uniform sampler2D lightmap;
 uniform vec3 playerPos;
 uniform int colMix;
 uniform int vanillaTracing;
+uniform float fogIntensity;
 
 float luma(vec3 color)
 {
@@ -37,6 +39,11 @@ vec3 hsv2rgb(vec3 c)
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
 
+float distSq(vec3 a, vec3 b)
+{
+	return pow(a.x - b.x, 2) + pow(a.y - b.y, 2) + pow(a.z - b.z, 2);
+}
+
 void main()
 {
 	vec3 lightdark = texture2D(lightmap,gl_TexCoord[1].st).rgb;
@@ -53,10 +60,10 @@ void main()
 	baseColor = baseColor * vec4(lightdark, 1);
 	vec3 dv = position - playerPos;
 
-	float dist = max(sqrt(dv.x * dv.x + dv.y * dv.y + dv.z * dv.z) - gl_Fog.start, 0.0f) / (gl_Fog.end - gl_Fog.start);
-	float fog = gl_Fog.density * dist;
-	fog = 1.0f - clamp(fog, 0.0f, 1.0f);
-	// baseColor = vec4(mix(vec3(gl_Fog.color), baseColor.xyz, fog).rgb, baseColor.a);
+	float dist = max(dist2Obj - gl_Fog.start, 0.0f) / (gl_Fog.end - gl_Fog.start);
+	float fog = gl_Fog.density * dist * fogIntensity;
+	fog = 1.0 - clamp(fog, 0.0, 1.0);
+	baseColor = vec4(mix(vec3(gl_Fog.color), baseColor.xyz, fog).rgb, baseColor.a);
 
     vec3 hsv = rgb2hsv(baseColor.rgb);
     hsv.y *= saturation;

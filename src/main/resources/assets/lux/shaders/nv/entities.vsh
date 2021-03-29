@@ -2,6 +2,7 @@
 
 out vec4 lcolor;
 out float intens;
+out float dist2Obj;
 
 struct Light
 {
@@ -28,6 +29,8 @@ void main()
 	gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
 	gl_FrontColor = gl_Color;
 	lcolor = vec4(0, 0, 0, 1.0f);
+    dist2Obj = length(gl_Position);
+
 	float sumR = 0;
 	float sumG = 0;
 	float sumB = 0;

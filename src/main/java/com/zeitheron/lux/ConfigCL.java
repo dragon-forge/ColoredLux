@@ -29,6 +29,9 @@ public class ConfigCL
 	@ModConfigPropertyBool(name = "Light Add Mode", category = "Client-Side", defaultValue = true, comment = "Should the light sources add up or max with vanilla lighting?\ntrue: The light sources will add up with minecraft lighting engine. (More washed out, but more realistic)\nfalse: The total light value will be maximal brightness from minecraft and colored (or something inbetween) (Vivid but unrealistic)")
 	public static boolean lightAddMode = true;
 
+	@ModConfigPropertyBool(name = "Enable Fog", category = "Client-Side", defaultValue = true, comment = "Should colored lighting engine render fog?\ntrue: The fog will be rendered alongside the colored lighting.\nfalse: No fog should be visible when colored lighting is enabled.")
+	public static boolean enableFog = true;
+
 	public static Configuration cfgs;
 
 	@Override

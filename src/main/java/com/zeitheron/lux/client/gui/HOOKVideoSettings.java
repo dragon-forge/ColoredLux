@@ -201,6 +201,22 @@ public class HOOKVideoSettings
 			}
 			desc.addAll(Arrays.asList(str.split("<br>")));
 		}
+
+		if(opt == LUX_ENABLE_FOG)
+		{
+			String str = I18n.format("options.lux:fog.desc");
+			while(str.contains("{OF}") && str.contains("{/}"))
+			{
+				int ofi = str.indexOf("{OF}");
+				int ofe = str.indexOf("{/}", ofi);
+				String inner = str.substring(ofi + 4, ofe);
+				if(OptifineInstalled)
+					str = str.replace("{OF}" + inner + "{/}", inner);
+				else
+					str = str.replace("{OF}" + inner + "{/}", "");
+			}
+			desc.addAll(Arrays.asList(str.split("<br>")));
+		}
 		
 		if(opt == LUX_PACKS)
 		{
@@ -213,6 +229,9 @@ public class HOOKVideoSettings
 	{
 		if(opt == LUX_ENABLE_LIGHTING)
 			return ConfigCL.enableColoredLighting;
+
+		if(opt == LUX_ENABLE_FOG)
+			return ConfigCL.enableFog;
 		
 		if(opt == LUX_PACKS)
 			return null;
@@ -226,6 +245,13 @@ public class HOOKVideoSettings
 		{
 			ConfigCL.enableColoredLighting = !ConfigCL.enableColoredLighting;
 			ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true).set(ConfigCL.enableColoredLighting);
+			ConfigCL.cfgs.save();
+		}
+
+		if(opt == LUX_ENABLE_FOG)
+		{
+			ConfigCL.enableFog = !ConfigCL.enableFog;
+			ConfigCL.cfgs.get("Client-Side", "Enable Fog", true).set(ConfigCL.enableFog);
 			ConfigCL.cfgs.save();
 		}
 		
