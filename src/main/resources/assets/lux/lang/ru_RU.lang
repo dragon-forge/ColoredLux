@@ -2,8 +2,11 @@
 options.lux:lighting=Цветное освещение
 options.lux:lighting.desc=Эта опция включает цветное освещение.{OF}<br>§2Внимание: Обнаружен OptiFine! Цветное освещение, скорее всего, не будет работать.{/}<br><br>§4Эта опция имеет очень высокое влияние на производительность.<br>§2Производительность сильно зависит от вашего графического процессора.<br><br>§9Рекомендуемые ГП: <br>§anVidia: GTX 650+<br>§cAMD: R7 250+<br>§bIntel: UHD 630+.
 
-options.lux:packs=Наборы света
+options.lux:packs=Наборы света...
 options.lux:packs.desc=Этот интерфейс позволяет загружать поддержу для сторонних модов.<br>Lux Pack API возволяет разработчикам сборок добавлять наборы как модули,<br>для каждого мода, предоставляя более простое решение для отладки.
+
+options.lux:fog=Lux Fog
+options.lux:fog.desc=This option enables fog rendering while colored lighting is enabled.
 
 luxPack.title=Выбрать наборы света
 luxPack.folderInfo=(Поместите сюда наборы света)

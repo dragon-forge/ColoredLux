@@ -2,8 +2,11 @@
 options.lux:lighting=Colored Lighting
 options.lux:lighting.desc=This option enables colored lighting.{OF}<br>§2Warning: OptiFine detected! Colored lighting probably won't work.{/}<br><br>§4This option has very high performance impact.<br>§2Performance heavily depends on your GPU.<br><br>§9Recommended GPUs: <br>§anVidia: GTX 650+<br>§cAMD: R7 250+<br>§bIntel: UHD 630+.
 
-options.lux:packs=Lux Packs
+options.lux:packs=Lux Packs...
 options.lux:packs.desc=This GUI allows to hotload support for third party mods.<br>Lux Pack API allows pack developers to add packs as modules,<br>for each mod, allowing easier debug solution.
+
+options.lux:fog=Lux Fog
+options.lux:fog.desc=This option enables fog rendering while colored lighting is enabled.
 
 luxPack.title=Select Lux Packs
 luxPack.folderInfo=(Place lux pack files here)

@@ -1,0 +1,60 @@
+package org.zeith.lux.client;
+
+import com.zeitheron.hammercore.api.lighting.ColoredLight;
+import com.zeitheron.hammercore.client.utils.gl.GLBuffer;
+import com.zeitheron.hammercore.client.utils.gl.IGLBufferStream;
+import org.lwjgl.BufferUtils;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL31;
+
+import java.nio.FloatBuffer;
+import java.util.List;
+
+public class LightSegment
+{
+	private GLBuffer lightUBO;
+
+	public final int start, end, size;
+	private final FloatBuffer uboData;
+	private final IGLBufferStream<Float> uboStream;
+
+	public LightSegment(int start, int end)
+	{
+		this.start = start;
+		this.end = end;
+		this.size = end - start;
+		uboData = BufferUtils.createFloatBuffer(size * ColoredLight.FLOAT_SIZE);
+		uboStream = uboData::put;
+	}
+
+	FloatBuffer updateUBO()
+	{
+		List<ColoredLight> lights = ClientLightManager.lights;
+		uboData.clear();
+		int e = Math.min(lights.size(), end);
+		for(int i = start; i < e; ++i) lights.get(i).writeFloats(uboStream);
+		uboData.flip();
+		return uboData;
+	}
+
+	public GLBuffer getUBO()
+	{
+		createUBO();
+		return lightUBO;
+	}
+
+	void createUBO()
+	{
+		if(lightUBO != null)
+			return;
+		lightUBO = new GLBuffer();
+		lightUBO.bufferData(updateUBO());
+		GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, 0);
+	}
+
+	void refreshUBO()
+	{
+		createUBO();
+		lightUBO.bufferData(updateUBO());
+	}
+}

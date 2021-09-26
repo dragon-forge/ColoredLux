@@ -31,7 +31,7 @@ configFile.withReader {
 }
 
 version = "${config.mod_version}"
-group = "com.zeitheron.${config.mod_id}"
+group = "org.zeith.lux"
 archivesBaseName = "${config.mod_id_fancy}-${config.minecraft_version}"
 
 sourceCompatibility = targetCompatibility = "1.8"
@@ -52,7 +52,7 @@ minecraft {
 repositories {
     maven {
         name = "DragonForge"
-        url = "https://raw.github.com/dragon-forge/maven/master"
+        url = "https://zeith.org/maven"
     }
     maven {
         name = "jei"
@@ -61,8 +61,8 @@ repositories {
 }
 
 dependencies {
-	deobfCompile "tk.zeitheron.HammerLib:HammerLib-${config.minecraft_version}:${config.hc_version}:deobf"
-	deobfCompile "tk.zeitheron.ScreenshotWatermark:ScreenshotWatermark-1.12.2:12.1.1:deobf"
+	deobfCompile "org.zeith.HammerLib:HammerLib-${config.minecraft_version}:${config.hc_version}"
+	deobfCompile "org.zeith.ScreenshotWatermark:ScreenshotWatermark-1.12.2:12.1.1"
 	
     deobfCompile "mezz.jei:jei_${config.minecraft_version}:${config.jei_version}:api"
     runtime "mezz.jei:jei_${config.minecraft_version}:${config.jei_version}"
