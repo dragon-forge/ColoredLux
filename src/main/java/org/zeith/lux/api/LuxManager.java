@@ -88,10 +88,10 @@ public class LuxManager
 			if(light != null) lights.add((light));
 		}
 
-		if(JsonBlockLights.handlers.containsKey(state.getBlock()))
+		if(BLOCK_LUMINANCES.containsKey(state.getBlock()))
 		{
 			GatherLightsEvent e = ClientLightManager.newEvent(lights, partialTicks);
-			JsonBlockLights.handlers.get(state.getBlock()).createLights(world, pos, state, e);
+			BLOCK_LUMINANCES.get(state.getBlock()).createLights(world, pos, state, e);
 		}
 
 		return lights;

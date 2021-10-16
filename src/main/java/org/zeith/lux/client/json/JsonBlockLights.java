@@ -79,7 +79,7 @@ public class JsonBlockLights
 	@SubscribeEvent
 	public static void reloadLuxManager(ReloadLuxManagerEvent e)
 	{
-		handlers.forEach(LuxManager.BLOCK_LUMINANCES::put);
+		LuxManager.BLOCK_LUMINANCES.putAll(handlers);
 	}
 
 	public static Map<Block, ILightBlockHandler> parse(JSONObject root)

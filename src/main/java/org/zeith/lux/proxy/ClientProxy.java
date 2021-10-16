@@ -499,6 +499,12 @@ public class ClientProxy
 		}
 	}
 
+	@Override
+	public float getFogIntensity()
+	{
+		return fogIntensity;
+	}
+
 	@SubscribeEvent
 	public void clientTick(ClientTickEvent e)
 	{
@@ -509,8 +515,6 @@ public class ClientProxy
 			if(wc != null && !wc.eventListeners.contains(BLOCK_UPDATE_DETECTOR))
 				wc.eventListeners.add(BLOCK_UPDATE_DETECTOR);
 			searchTimer.setTPS(Math.max(Minecraft.getDebugFPS() / lightTPSDivisor, 1));
-
-			entityProgram.onReload();
 		}
 	}
 

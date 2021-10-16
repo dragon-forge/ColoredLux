@@ -14,6 +14,7 @@ uniform sampler2D lightmap;
 uniform vec3 playerPos;
 uniform int colMix;
 uniform int vanillaTracing;
+uniform float fogIntensity;
 
 float luma(vec3 color)
 {
@@ -55,13 +56,11 @@ void main()
 	vec3 dv = position - playerPos;
 
 	float dist = max(dist2Obj - gl_Fog.start, 0.f) / (gl_Fog.end - gl_Fog.start);
-	float fog = gl_Fog.density * dist;
+	float fog = gl_Fog.density * dist * fogIntensity;
 	fog = 1.f - clamp(fog, 0.f, 1.f);
 	baseColor = vec4(mix(vec3(gl_Fog.color), baseColor.xyz, fog).rgb, baseColor.a);
 
     vec3 hsv = rgb2hsv(baseColor.rgb);
     hsv.y *= saturation;
     gl_FragColor = vec4(hsv2rgb(hsv), baseColor.a);
-
-	// gl_FragColor = vec4(max(mix(baseColor.rgb * lightdark, baseColor.rgb * lcolor.rgb, intens), lightdark * baseColor.rgb), baseColor.a);
 }

@@ -15,4 +15,9 @@ public class CommonProxy
 	public void reloadLuxManager()
 	{
 	}
+
+	public float getFogIntensity()
+	{
+		return 1F;
+	}
 }
