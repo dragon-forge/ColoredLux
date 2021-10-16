@@ -1,11 +1,5 @@
 #version 150 compatibility
 
-in vec4 gl_Color;
-in vec4 gl_Vertex;
-in vec4 gl_MultiTexCoord0;
-in vec4 gl_MultiTexCoord1;
-out vec4 gl_FrontColor;
-
 out vec4 lcolor;
 out float intens;
 out float dist2Obj;
