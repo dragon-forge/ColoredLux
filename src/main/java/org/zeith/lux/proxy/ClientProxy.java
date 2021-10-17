@@ -426,7 +426,6 @@ public class ClientProxy
 						entityProgram.setUniform("worldTint", wtR, wtG, wtB);
 						entityProgram.setUniform("worldTintIntensity", wtInt);
 						entityProgram.setUniform("saturation", saturation);
-						entityProgram.setUniform("lightingEnabled", GL11.glIsEnabled(GL11.GL_LIGHTING));
 						terrainProgram.bindShader();
 						postedLights = true;
 						ClientLightManager.clear();
@@ -458,7 +457,6 @@ public class ClientProxy
 					if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
 					{
 						entityProgram.bindShader();
-						entityProgram.setUniform("lightingEnabled", true);
 						entityProgram.setUniform("fogIntensity", fogIntensity);
 					}
 					break;
@@ -467,7 +465,6 @@ public class ClientProxy
 					if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
 					{
 						entityProgram.bindShader();
-						entityProgram.setUniform("lightingEnabled", true);
 					}
 					break;
 				case "translucent":
