@@ -5,6 +5,7 @@ import com.zeitheron.hammercore.api.events.ProfilerEndStartEvent;
 import com.zeitheron.hammercore.api.events.RenderEntityEvent;
 import com.zeitheron.hammercore.api.events.RenderTileEntityEvent;
 import com.zeitheron.hammercore.api.lighting.*;
+import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.gl.shading.ShaderSource;
 import com.zeitheron.hammercore.client.utils.gl.shading.VariableShaderProgram;
 import com.zeitheron.hammercore.utils.ReflectionUtil;
@@ -24,6 +25,7 @@ import net.minecraft.util.text.TextFormatting;
 import net.minecraft.world.World;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.client.EnumHelperClient;
+import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent.ElementType;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
@@ -369,6 +371,47 @@ public class ClientProxy
 		LuxManager.reload();
 	}
 
+	// VR Fix is supposed to solve GUI flickering with Vivecraft, but it doesn't seem to work. :/
+	/* START VR FIX */
+	private boolean enableTerrain_gui, enableEntity_gui;
+
+	@SubscribeEvent(priority = EventPriority.HIGHEST)
+	public void renderScreenPre(GuiScreenEvent.DrawScreenEvent.Pre e)
+	{
+		Integer tp = terrainProgram.getProgramId();
+		Integer ep = entityProgram.getProgramId();
+		int active = GlShaderStack.glsActiveProgram();
+
+		enableTerrain_gui = enableEntity_gui = false;
+
+		if(tp != null && tp.equals(active))
+		{
+			enableTerrain_gui = true;
+			terrainProgram.unbindShader();
+		} else if(ep != null && ep.equals(active))
+		{
+			enableEntity_gui = true;
+			entityProgram.unbindShader();
+		}
+	}
+
+	@SubscribeEvent(priority = EventPriority.LOWEST)
+	public void renderScreenPost(GuiScreenEvent.DrawScreenEvent.Pre e)
+	{
+		if(enableTerrain_gui)
+		{
+			enableTerrain_gui = false;
+			terrainProgram.bindShader();
+		}
+
+		if(enableEntity_gui)
+		{
+			enableEntity_gui = false;
+			entityProgram.bindShader();
+		}
+	}
+	/* END VR FIX */
+
 	@SubscribeEvent
 	public void onProfilerChange(ProfilerEndStartEvent event)
 	{
@@ -395,10 +438,10 @@ public class ClientProxy
 					isGui = false;
 					precedesEntities = true;
 					terrainProgram.bindShader();
-					terrainProgram.setUniform("ticks", ticks + pt);
+//					terrainProgram.setUniform("ticks", ticks + pt);
 					terrainProgram.setUniform("sampler", 0);
 					terrainProgram.setUniform("lightmap", 1);
-					terrainProgram.setUniform("playerPos", playerX, playerY, playerZ);
+//					terrainProgram.setUniform("playerPos", playerX, playerY, playerZ);
 
 					float wtR = WorldTintHandler.tintRed, wtG = WorldTintHandler.tintGreen, wtB = WorldTintHandler.tintBlue, wtInt = WorldTintHandler.tintIntensity;
 					float saturation = WorldTintHandler.saturation;
@@ -418,11 +461,11 @@ public class ClientProxy
 						terrainProgram.bindShader();
 						ClientLightManager.uploadLightsUBO();
 						entityProgram.bindShader();
-						entityProgram.setUniform("ticks", ticks + Minecraft.getMinecraft().getRenderPartialTicks());
+//						entityProgram.setUniform("ticks", ticks + Minecraft.getMinecraft().getRenderPartialTicks());
 						entityProgram.setUniform("sampler", 0);
 						entityProgram.setUniform("lightmap", 1);
 						ClientLightManager.uploadLightsUBO();
-						entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
+//						entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
 						entityProgram.setUniform("worldTint", wtR, wtG, wtB);
 						entityProgram.setUniform("worldTintIntensity", wtInt);
 						entityProgram.setUniform("saturation", saturation);
@@ -437,8 +480,8 @@ public class ClientProxy
 					terrainProgram.bindShader();
 					terrainProgram.setUniform("sampler", 0);
 					terrainProgram.setUniform("lightmap", 1);
-					if(player != null)
-						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+//					if(player != null)
+//						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
 					terrainProgram.setUniform("chunkX", 0);
 					terrainProgram.setUniform("chunkY", 0);
 					terrainProgram.setUniform("chunkZ", 0);
@@ -471,8 +514,8 @@ public class ClientProxy
 					terrainProgram.bindShader();
 					terrainProgram.setUniform("sampler", 0);
 					terrainProgram.setUniform("lightmap", 1);
-					if(player != null)
-						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+//					if(player != null)
+//						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
 					break;
 				case "hand":
 					entityProgram.bindShader();

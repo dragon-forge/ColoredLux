@@ -18,6 +18,7 @@ buildscript {
 plugins {
     id 'com.matthewprenger.cursegradle' version '1.1.0'
 	id 'se.bjurr.gitchangelog.git-changelog-gradle-plugin' version '1.56'
+    id 'maven-publish'
 }
 
 apply plugin: 'net.minecraftforge.gradle.forge'
@@ -52,7 +53,7 @@ minecraft {
 repositories {
     maven {
         name = "DragonForge"
-        url = "https://zeith.org/maven"
+        url = "https://maven.zeith.org"
     }
     maven {
         name = "jei"
@@ -193,4 +194,31 @@ afterEvaluate {
 	tasks["curseforge${config.cf_project}"].dependsOn.add(signDeobfJar)
 	tasks["curseforge${config.cf_project}"].dependsOn.add(signSrcJar)
 	tasks["curseforge${config.cf_project}"].dependsOn.add(makeChangelog)
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            groupId = 'org.zeith'
+            artifactId = 'ColoredLux'
+            version = config.version
+            from components.java
+
+            pom {
+                name = 'ColoredLux'
+                description = 'ColoredLux is a minecraft engine for support of colored lighting.'
+                dependencies {
+                    deobfCompile "org.zeith.HammerLib:HammerLib-${config.minecraft_version}:${config.hc_version}"
+                }
+            }
+
+            artifact srcJar
+            artifact deobfJar
+        }
+    }
+    repositories {
+        maven {
+            url "file:///SERVER//Maven"
+        }
+    }
 }

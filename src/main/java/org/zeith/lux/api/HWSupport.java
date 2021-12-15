@@ -17,7 +17,7 @@ public class HWSupport
 	}
 	
 	/**
-	 * Whether or not the ColoredLux has handled displaying the warning to end user in the current game instance.
+	 * Whether the ColoredLux has handled displaying the warning to end user in the current game instance.
 	 * Show your warning IF AND ONLY IF this method returns false!!!
 	 */
 	public static boolean hasHandledWarning()
@@ -37,7 +37,7 @@ public class HWSupport
 		
 		if(shdr == EnumShaderVersion.NVIDIA) return EnumGPUCompat.FULL;
 		if(shdr == EnumShaderVersion.INTEL) return EnumGPUCompat.UNTESTED;
-		if(shdr == EnumShaderVersion.AMD) return EnumGPUCompat.GLITCHY;
+		if(shdr == EnumShaderVersion.AMD) return EnumGPUCompat.PARTIAL;
 		
 		return EnumGPUCompat.ABSENT;
 	}
