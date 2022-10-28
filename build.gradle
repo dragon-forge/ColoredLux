@@ -201,16 +201,8 @@ publishing {
         maven(MavenPublication) {
             groupId = 'org.zeith'
             artifactId = 'ColoredLux'
-            version = config.version
+            version = config.mod_version
             from components.java
-
-            pom {
-                name = 'ColoredLux'
-                description = 'ColoredLux is a minecraft engine for support of colored lighting.'
-                dependencies {
-                    deobfCompile "org.zeith.HammerLib:HammerLib-${config.minecraft_version}:${config.hc_version}"
-                }
-            }
 
             artifact srcJar
             artifact deobfJar

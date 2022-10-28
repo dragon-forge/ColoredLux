@@ -10,31 +10,23 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.entity.Entity;
 import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.*;
 import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.EntityRegistry;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL31;
+import org.lwjgl.opengl.*;
 import org.zeith.lux.ConfigCL;
 import org.zeith.lux.api.comparators.ColoredLightComparator;
 import org.zeith.lux.api.event.GatherLightsEvent;
 import org.zeith.lux.luxpack.apis.LuxPackAPIv2;
 import org.zeith.lux.proxy.ClientProxy;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.ConcurrentModificationException;
-import java.util.List;
+import java.util.*;
 import java.util.function.Consumer;
 
 import static org.lwjgl.opengl.GL30.glBindBufferBase;
-import static org.lwjgl.opengl.GL31.glGetUniformBlockIndex;
-import static org.lwjgl.opengl.GL31.glUniformBlockBinding;
+import static org.lwjgl.opengl.GL31.*;
 
 public class ClientLightManager
 {
@@ -149,8 +141,10 @@ public class ClientLightManager
 
 		EntityEntry en;
 		for(Entity e : world.getEntitiesWithinAABB(Entity.class, new AxisAlignedBB(cameraPos.x - maxDist, cameraPos.y - maxDist, cameraPos.z - maxDist, cameraPos.x + maxDist, cameraPos.y + maxDist, cameraPos.z + maxDist)))
-			if((en = EntityRegistry.getEntry(e.getClass())) != null)
+			if((en = EntityRegistry.getEntry(e.getClass())) != null && e.isAddedToWorld())
 			{
+				if(e.isInvisibleToPlayer(mc.player))
+					continue;
 				TriConsumer<World, Entity, Consumer<ColoredLight>> consumer = LuxPackAPIv2.CUSTOM_ENTITY_LIGHTS.get(en);
 				if(consumer != null) consumer.accept(world, e, event::add);
 			}
@@ -159,7 +153,8 @@ public class ClientLightManager
 		{
 			for(TileEntity t : world.loadedTileEntityList)
 			{
-				if(Math.sqrt(t.getPos().distanceSqToCenter(cameraPos.x, cameraPos.y, cameraPos.z)) >= ConfigCL.maxRenderDistance)
+				if(t == null || t.getPos() == null // Man, mods are broken as fuck sometimes...
+					|| Math.sqrt(t.getPos().distanceSqToCenter(cameraPos.x, cameraPos.y, cameraPos.z)) >= ConfigCL.maxRenderDistance)
 					continue;
 
 				if(world.isBlockLoaded(t.getPos()))

@@ -1,9 +1,6 @@
 package org.zeith.lux.proxy;
 
-import com.zeitheron.hammercore.api.events.PreRenderChunkEvent;
-import com.zeitheron.hammercore.api.events.ProfilerEndStartEvent;
-import com.zeitheron.hammercore.api.events.RenderEntityEvent;
-import com.zeitheron.hammercore.api.events.RenderTileEntityEvent;
+import com.zeitheron.hammercore.api.events.*;
 import com.zeitheron.hammercore.api.lighting.*;
 import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.gl.shading.ShaderSource;
@@ -25,10 +22,8 @@ import net.minecraft.util.text.TextFormatting;
 import net.minecraft.world.World;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.client.EnumHelperClient;
-import net.minecraftforge.client.event.GuiScreenEvent;
-import net.minecraftforge.client.event.RenderGameOverlayEvent;
+import net.minecraftforge.client.event.*;
 import net.minecraftforge.client.event.RenderGameOverlayEvent.ElementType;
-import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
@@ -49,9 +44,7 @@ import org.zeith.lux.api.LuxManager;
 import org.zeith.lux.api.event.CalculateFogIntensityEvent;
 import org.zeith.lux.api.light.ILightBlockHandler;
 import org.zeith.lux.api.light.ILightEntityHandler;
-import org.zeith.lux.client.BUD;
-import org.zeith.lux.client.ClientLightManager;
-import org.zeith.lux.client.ThreadTimer;
+import org.zeith.lux.client.*;
 import org.zeith.lux.client.commands.CommandLux;
 import org.zeith.lux.client.json.JsonBlockLights;
 import org.zeith.lux.client.json.JsonEntityLights;
@@ -72,6 +65,7 @@ public class ClientProxy
 	private static int ticks;
 	public static VariableShaderProgram terrainProgram;
 	public static VariableShaderProgram entityProgram;
+	public static VariableShaderProgram guiProgram;
 	public static boolean isGui = false;
 	static final int runtimeCores = Runtime.getRuntime().availableProcessors();
 	static final int lightTPSDivisor = runtimeCores <= 4 ? 8 : runtimeCores <= 8 ? 4 : 2;
@@ -238,6 +232,15 @@ public class ClientProxy
 				})
 				.doGLLog(false)
 				.subscribe4Events();
+
+		ClientProxy.guiProgram = new VariableShaderProgram()
+				.id(new ResourceLocation("lux", "gui"))
+				.addVariable(new ShaderLightingVariable("getLight", "Light"))
+				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", "shaders/gui/.fsh")))
+				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", "shaders/gui/.vsh")))
+				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE)
+				.doGLLog(false)
+				.subscribe4Events();
 	}
 
 	@Override
@@ -393,11 +396,15 @@ public class ClientProxy
 			enableEntity_gui = true;
 			entityProgram.unbindShader();
 		}
+
+		guiProgram.bindShader();
 	}
 
 	@SubscribeEvent(priority = EventPriority.LOWEST)
-	public void renderScreenPost(GuiScreenEvent.DrawScreenEvent.Pre e)
+	public void renderScreenPost(GuiScreenEvent.DrawScreenEvent.Post e)
 	{
+		guiProgram.unbindShader();
+
 		if(enableTerrain_gui)
 		{
 			enableTerrain_gui = false;
