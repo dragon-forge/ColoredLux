@@ -378,7 +378,7 @@ public class ClientProxy
 	/* START VR FIX */
 	private boolean enableTerrain_gui, enableEntity_gui;
 
-	@SubscribeEvent(priority = EventPriority.HIGHEST)
+//	@SubscribeEvent(priority = EventPriority.HIGHEST)
 	public void renderScreenPre(GuiScreenEvent.DrawScreenEvent.Pre e)
 	{
 		Integer tp = terrainProgram.getProgramId();
@@ -400,7 +400,7 @@ public class ClientProxy
 		guiProgram.bindShader();
 	}
 
-	@SubscribeEvent(priority = EventPriority.LOWEST)
+//	@SubscribeEvent(priority = EventPriority.LOWEST)
 	public void renderScreenPost(GuiScreenEvent.DrawScreenEvent.Post e)
 	{
 		guiProgram.unbindShader();
