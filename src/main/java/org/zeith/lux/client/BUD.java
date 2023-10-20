@@ -3,14 +3,14 @@ package org.zeith.lux.client;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.SoundEvent;
+import net.minecraft.util.*;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.IWorldEventListener;
-import net.minecraft.world.World;
+import net.minecraft.world.*;
 import org.zeith.lux.api.LuxManager;
 import org.zeith.lux.api.light.ILightBlockHandler;
 import org.zeith.lux.proxy.ClientProxy;
+
+import java.lang.ref.WeakReference;
 
 public class BUD
 		implements IWorldEventListener
@@ -22,7 +22,8 @@ public class BUD
 		if(handler != null)
 		{
 			BlockPos ipos = pos.toImmutable();
-			ClientProxy.EXISTING.put(ipos, new ILightBlockHandler.LightBlockWrapper(worldIn, ipos, newState, handler));
+			newState = newState.getBlock().getExtendedState(newState, worldIn, pos);
+			ClientProxy.EXISTING.put(ipos, new ILightBlockHandler.LightBlockWrapper(new WeakReference<>(worldIn), ipos, newState, handler));
 		} else
 			ClientProxy.EXISTING.remove(pos);
 	}

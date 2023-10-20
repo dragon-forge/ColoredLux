@@ -4,13 +4,11 @@ import com.google.common.base.Predicates;
 import com.zeitheron.hammercore.api.lighting.ColoredLight;
 import com.zeitheron.hammercore.lib.zlib.error.JSONException;
 import com.zeitheron.hammercore.lib.zlib.io.IOUtils;
-import com.zeitheron.hammercore.lib.zlib.json.JSONArray;
-import com.zeitheron.hammercore.lib.zlib.json.JSONObject;
-import com.zeitheron.hammercore.lib.zlib.json.JSONTokener;
+import com.zeitheron.hammercore.lib.zlib.json.*;
 import com.zeitheron.hammercore.utils.FastNoise;
 import com.zeitheron.hammercore.utils.math.ExpressionEvaluator;
 import com.zeitheron.hammercore.utils.math.functions.ExpressionFunction;
-import it.unimi.dsi.fastutil.longs.Long2ObjectArrayMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.block.Block;
 import net.minecraft.block.properties.IProperty;
 import net.minecraft.block.state.IBlockState;
@@ -23,17 +21,12 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import org.zeith.lux.api.LuxManager;
-import org.zeith.lux.api.event.GatherLightsEvent;
-import org.zeith.lux.api.event.ReloadLuxManagerEvent;
+import org.zeith.lux.api.event.*;
 import org.zeith.lux.api.light.ILightBlockHandler;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.*;
 import java.util.stream.Collectors;
 
 @Mod.EventBusSubscriber
@@ -233,15 +226,15 @@ public class JsonBlockLights
 			implements ILightBlockHandler
 	{
 		public final List<ParsedLight> lights;
-
+		
+		protected Long2ObjectOpenHashMap<List<ColoredLight.Builder>> builtLights = new Long2ObjectOpenHashMap<>();
+		protected Long2ObjectOpenHashMap<List<ColoredLight.Builder>> builtCache = new Long2ObjectOpenHashMap<>();
+		
 		public PresedLightBlockHandler(List<ParsedLight> lights)
 		{
 			this.lights = lights;
 		}
-
-		Long2ObjectArrayMap<List<ColoredLight.Builder>> builtLights = new Long2ObjectArrayMap<>();
-		Long2ObjectArrayMap<List<ColoredLight.Builder>> builtCache = new Long2ObjectArrayMap<>();
-
+		
 		@Override
 		public void update(IBlockState state, BlockPos pos)
 		{

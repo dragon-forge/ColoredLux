@@ -3,6 +3,9 @@ package org.zeith.lux.api.light;
 import net.minecraft.entity.Entity;
 import org.zeith.lux.api.event.GatherLightsEvent;
 
+import javax.annotation.Nonnull;
+import java.lang.ref.WeakReference;
+
 public interface ILightEntityHandler
 {
 	void createLights(Entity entity, GatherLightsEvent e);
@@ -14,26 +17,29 @@ public interface ILightEntityHandler
 	default void update(Entity entity)
 	{
 	}
-
+	
 	class Wrapper
 	{
-		public final Entity entity;
-
-		public Wrapper(Entity entity, ILightEntityHandler handler)
+		public final WeakReference<Entity> entity;
+		
+		@Nonnull
+		protected ILightEntityHandler handler;
+		
+		public Wrapper(Entity entity, @Nonnull ILightEntityHandler handler)
 		{
-			this.entity = entity;
+			this.entity = new WeakReference<>(entity);
 			this.handler = handler;
 			this.handler.update(entity);
 		}
-
-		ILightEntityHandler handler;
-
+		
+		
 		public void addLights(GatherLightsEvent e)
 		{
-			if(handler != null)
-				handler.createLights(entity, e);
+			Entity ent = entity.get();
+			if(ent != null)
+				handler.createLights(ent, e);
 		}
-
+		
 		public void remove(int id)
 		{
 			handler.remove(id);

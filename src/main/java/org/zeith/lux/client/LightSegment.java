@@ -1,11 +1,9 @@
 package org.zeith.lux.client;
 
 import com.zeitheron.hammercore.api.lighting.ColoredLight;
-import com.zeitheron.hammercore.client.utils.gl.GLBuffer;
-import com.zeitheron.hammercore.client.utils.gl.IGLBufferStream;
+import com.zeitheron.hammercore.client.utils.gl.*;
 import org.lwjgl.BufferUtils;
-import org.lwjgl.opengl.GL15;
-import org.lwjgl.opengl.GL31;
+import org.lwjgl.opengl.*;
 
 import java.nio.FloatBuffer;
 import java.util.List;

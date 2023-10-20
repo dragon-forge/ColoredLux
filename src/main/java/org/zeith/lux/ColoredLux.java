@@ -1,17 +1,21 @@
 package org.zeith.lux;
 
 import com.zeitheron.hammercore.HammerCore;
-import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.common.*;
 import net.minecraftforge.fml.common.Mod.EventHandler;
-import net.minecraftforge.fml.common.SidedProxy;
-import net.minecraftforge.fml.common.event.FMLFingerprintViolationEvent;
-import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import net.minecraftforge.fml.common.event.*;
+import org.apache.logging.log4j.*;
 import org.zeith.lux.proxy.CommonProxy;
 
-@Mod(modid = "lux", name = "Colored Lux", version = "@VERSION@", certificateFingerprint = "9f5e2a811a8332a842b34f6967b7db0ac4f24856", updateJSON = "http://dccg.herokuapp.com/api/fmluc/347912", guiFactory = "org.zeith.lux.client.CLGuiFactory", dependencies = "required-after:hammercore")
+@Mod(
+		modid = "lux",
+		name = "Colored Lux",
+		version = "@VERSION@",
+		certificateFingerprint = "9f5e2a811a8332a842b34f6967b7db0ac4f24856",
+		updateJSON = "https://api.modrinth.com/updates/mEr4VarV/forge_updates.json",
+		guiFactory = "org.zeith.lux.client.CLGuiFactory",
+		dependencies = "required-after:hammercore"
+)
 public class ColoredLux
 {
 	public static final Logger LOG = LogManager.getLogger("ColoredLux");

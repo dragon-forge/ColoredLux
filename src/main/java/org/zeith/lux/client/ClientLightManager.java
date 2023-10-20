@@ -1,11 +1,9 @@
 package org.zeith.lux.client;
 
-import com.zeitheron.hammercore.api.lighting.ColoredLight;
-import com.zeitheron.hammercore.api.lighting.ColoredLightManager;
+import com.zeitheron.hammercore.api.lighting.*;
 import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.gl.GLBuffer;
-import com.zeitheron.hammercore.utils.java.itf.QuadConsumer;
-import com.zeitheron.hammercore.utils.java.itf.TriConsumer;
+import com.zeitheron.hammercore.utils.java.itf.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.entity.Entity;
@@ -13,8 +11,7 @@ import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.*;
 import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.registry.EntityEntry;
-import net.minecraftforge.fml.common.registry.EntityRegistry;
+import net.minecraftforge.fml.common.registry.*;
 import org.lwjgl.opengl.*;
 import org.zeith.lux.ConfigCL;
 import org.zeith.lux.api.comparators.ColoredLightComparator;
@@ -188,12 +185,15 @@ public class ClientLightManager
 	{
 		int lps = GL11.glGetInteger(GL31.GL_MAX_UNIFORM_BLOCK_SIZE) / ColoredLight.FLOAT_SIZE / 4;
 		int segments = Math.max(1, (int) Math.ceil(ClientProxy.UNIF_LIGHTS.getAsInt() / (double) lps));
+		
 		for(int i = 0; i < segments; ++i)
 		{
 			int start = lps * i;
 			int end = start + lps;
-			if(lightSegments.size() == i) lightSegments.add(new LightSegment(start, end));
+			if(lightSegments.size() == i)
+				lightSegments.add(new LightSegment(start, end));
 		}
+		
 		return segments;
 	}
 

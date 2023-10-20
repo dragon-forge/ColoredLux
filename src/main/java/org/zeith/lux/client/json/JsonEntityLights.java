@@ -4,9 +4,7 @@ import com.google.common.base.Predicates;
 import com.zeitheron.hammercore.api.lighting.ColoredLight;
 import com.zeitheron.hammercore.lib.zlib.error.JSONException;
 import com.zeitheron.hammercore.lib.zlib.io.IOUtils;
-import com.zeitheron.hammercore.lib.zlib.json.JSONArray;
-import com.zeitheron.hammercore.lib.zlib.json.JSONObject;
-import com.zeitheron.hammercore.lib.zlib.json.JSONTokener;
+import com.zeitheron.hammercore.lib.zlib.json.*;
 import com.zeitheron.hammercore.utils.FastNoise;
 import com.zeitheron.hammercore.utils.math.ExpressionEvaluator;
 import com.zeitheron.hammercore.utils.math.functions.ExpressionFunction;
@@ -15,20 +13,14 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.registry.EntityEntry;
-import net.minecraftforge.fml.common.registry.ForgeRegistries;
+import net.minecraftforge.fml.common.registry.*;
 import org.zeith.lux.api.LuxManager;
-import org.zeith.lux.api.event.GatherLightsEvent;
-import org.zeith.lux.api.event.ReloadLuxManagerEvent;
+import org.zeith.lux.api.event.*;
 import org.zeith.lux.api.light.ILightEntityHandler;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.*;
 import java.util.stream.Collectors;
 
 @Mod.EventBusSubscriber
@@ -226,15 +218,14 @@ public class JsonEntityLights
 			implements ILightEntityHandler
 	{
 		public final List<ParsedLight> lights;
+		protected Map<Integer, List<ColoredLight.Builder>> builtLights = new HashMap<>();
+		protected Map<Integer, List<ColoredLight.Builder>> builtCache = new HashMap<>();
 
 		public PresetLightEntityHandler(List<ParsedLight> lights)
 		{
 			this.lights = lights;
 		}
-
-		Map<Integer, List<ColoredLight.Builder>> builtLights = new HashMap<>();
-		Map<Integer, List<ColoredLight.Builder>> builtCache = new HashMap<>();
-
+		
 		@Override
 		public void update(Entity entity)
 		{
