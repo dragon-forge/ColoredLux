@@ -33,29 +33,6 @@ public class ClientLightManager
 	public static int debugLights, debugCulledLights;
 	public static Comparator<ColoredLight> distComparator = ColoredLightComparator.byDistanceFrom(() -> cameraPos);
 
-	@Deprecated
-	public static void uploadLights()
-	{
-		int shader = GlShaderStack.glsActiveProgram();
-
-		int size = debugCulledLights = Math.min(ConfigCL.maxLights, lights.size());
-		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "lightCount"), size);
-		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), ConfigCL.lightAddMode ? 1 : 0);
-		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "vanillaTracing"), 0);
-		debugLights = lights.size();
-
-		for(int i = 0; i < size; i++)
-		{
-			if(i < lights.size())
-			{
-				ColoredLight l = lights.get(i);
-				GL20.glUniform3f(GlShaderStack.glsGetActiveUniformLoc("lights[" + i + "].position"), l.x, l.y, l.z);
-				GL20.glUniform4f(GlShaderStack.glsGetActiveUniformLoc("lights[" + i + "].color"), l.r, l.g, l.b, l.a);
-				GL20.glUniform1f(GlShaderStack.glsGetActiveUniformLoc("lights[" + i + "].radius"), l.radius);
-			}
-		}
-	}
-
 	public static void uploadLightsUBO()
 	{
 		int shader = GlShaderStack.glsActiveProgram();
@@ -63,22 +40,6 @@ public class ClientLightManager
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "lightCount"), size);
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), ConfigCL.lightAddMode ? 1 : 0);
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "vanillaTracing"), 0);
-
-//		if(segment == null) segment = new LightSegment(0, 2048);
-//		GLBuffer glBuffer = segment.getUBO();
-//		segment.getUBO().bindToShader(shader, 0, "lightBuffer0");
-//
-//		int UBO_TRANSFORM_INDEX = 0;
-//
-//		int bufIdx = glGetUniformBlockIndex(shader, "lightBuffer1");
-//		glUniformBlockBinding(shader, bufIdx, UBO_TRANSFORM_INDEX);
-//		glBindBufferBase(glBuffer.bufferKind, UBO_TRANSFORM_INDEX, glBuffer.buffer);
-//
-//		UBO_TRANSFORM_INDEX = 1;
-//
-//		bufIdx = glGetUniformBlockIndex(shader, "lightBuffer1");
-//		glUniformBlockBinding(shader, bufIdx, UBO_TRANSFORM_INDEX);
-//		glBindBufferBase(glBuffer.bufferKind, UBO_TRANSFORM_INDEX, glBuffer.buffer);
 
 		int segCount = getSegmentCount();
 		for(int i = 0; i < segCount; ++i)

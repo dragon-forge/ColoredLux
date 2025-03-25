@@ -3,6 +3,7 @@
 out vec4 lcolor;
 out float intens;
 out float dist2Obj;
+out vec3 Normal;
 
 struct Light
 {
@@ -18,6 +19,8 @@ uniform int lightCount;
 
 void main()
 {
+	Normal = normalize(gl_NormalMatrix * gl_Normal);
+
 	vec3 position = gl_Vertex.xyz + entityPos;
 	gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;
 	gl_TexCoord[1] = gl_TextureMatrix[1] * gl_MultiTexCoord1;

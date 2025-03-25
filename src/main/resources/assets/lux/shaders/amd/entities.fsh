@@ -3,6 +3,7 @@
 varying float intens;
 varying vec4 lcolor;
 varying float dist2Obj;
+varying vec3 Normal;
 
 uniform vec3 worldTint;
 uniform float worldTintIntensity;
@@ -14,6 +15,8 @@ uniform vec4 colorMult;
 uniform int vanillaTracing;
 uniform int colMix;
 uniform float fogIntensity;
+
+const vec3 NormalLightDir = normalize(vec3(0.0f, 1.0f, 0.0f));
 
 float luma(vec3 color)
 {
@@ -63,5 +66,9 @@ void main()
 
     vec3 hsv = rgb2hsv(baseColor.rgb);
     hsv.y *= saturation;
-    gl_FragColor = vec4(hsv2rgb(hsv), baseColor.a);
+
+    float brightessInfluence = mix(0.5f, 0.1f, intens);
+    float brightness = clamp((1.0f - brightessInfluence) + max(dot(normalize(Normal), NormalLightDir), 0.0f) * brightessInfluence, 0.5f, 1.0f);
+
+    gl_FragColor = vec4(hsv2rgb(hsv) * brightness, baseColor.a);
 }

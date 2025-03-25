@@ -28,10 +28,10 @@ public class ColoredLux
 	{
 		LOG.warn("*****************************");
 		LOG.warn("WARNING: Somebody has been tampering with ColoredLux jar!");
-		LOG.warn("It is highly recommended that you redownload mod from https://dccg.herokuapp.com/api/fmlhp/347912 !");
+		LOG.warn("It is highly recommended that you redownload mod from https://modrinth.com/mod/colored-lux !");
 		LOG.warn("*****************************");
 		HammerCore.invalidCertificate = true;
-		HammerCore.invalidCertificates.put("lux", "https://dccg.herokuapp.com/api/fmlhp/347912");
+		HammerCore.invalidCertificates.put("lux", "https://modrinth.com/mod/colored-lux");
 	}
 	
 	@EventHandler
