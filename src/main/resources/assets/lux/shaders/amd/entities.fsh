@@ -16,7 +16,7 @@ uniform int vanillaTracing;
 uniform int colMix;
 uniform float fogIntensity;
 
-const vec3 NormalLightDir = normalize(vec3(0.0f, 1.0f, 0.0f));
+const vec3 NormalLightDir = normalize(vec3(0.5f, 1.0f, 0.5f));
 
 float luma(vec3 color)
 {
