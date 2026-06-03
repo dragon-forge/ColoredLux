@@ -17,8 +17,8 @@ public class ConfigCL
 	@ModConfigPropertyInt(name = "Max Render Distance", category = "Client-Side", defaultValue = 128, min = 1, max = 512, comment = "How far the lights would be culled after?")
 	public static int maxRenderDistance = 128;
 
-	@ModConfigPropertyInt(name = "Max Search Distance", category = "Client-Side", defaultValue = 32, min = 1, max = 128, comment = "What range should lighting blocks search? If your CPU has less cores, try reducing this value to 12-16 blocks.")
-	public static int maxSearchDistance = 32;
+	@ModConfigPropertyInt(name = "Max Search Distance", category = "Client-Side", defaultValue = 48, min = 1, max = 128, comment = "What range should lighting blocks search? If your CPU has less cores, try reducing this value to 12-16 blocks.")
+	public static int maxSearchDistance = 48;
 
 	@ModConfigPropertyInt(name = "Min Lights", category = "Client-Side", defaultValue = 1024, min = 0, max = 2048, comment = "How many lights would the mod allocate to render into the world by default? When the limit is reached, you'll see a flicker. That indicates that the allocation has been doubled automatically.")
 	public static int minLights = 1024;

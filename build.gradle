@@ -190,33 +190,40 @@ task makeChangelog(type: se.bjurr.gitchangelog.plugin.gradle.GitChangelogTask) {
 """
 }
 
-build.dependsOn signJar
-build.dependsOn signDeobfJar
-build.dependsOn signSrcJar
 tasks.build.dependsOn makeChangelog
 
+tasks.jar.finalizedBy(signJar)
+tasks.deobfJar.finalizedBy(signDeobfJar)
+
 afterEvaluate {
-	tasks["curseforge${config.cf_project}"].dependsOn.add(signJar)
-	tasks["curseforge${config.cf_project}"].dependsOn.add(signDeobfJar)
-	tasks["curseforge${config.cf_project}"].dependsOn.add(signSrcJar)
 	tasks["curseforge${config.cf_project}"].dependsOn.add(makeChangelog)
 }
 
 publishing {
     publications {
-        maven(MavenPublication) {
-            groupId = 'org.zeith'
-            artifactId = 'ColoredLux'
-            version = config.mod_version
-            from components.java
+        mavenJava(MavenPublication) {
+            artifact(deobfJar) {
+                classifier null
+            }
 
             artifact srcJar
             artifact deobfJar
+
+            groupId = 'org.zeith.ColoredLux'
+            artifactId = "ColoredLux-1.12.2"
+
+            pom.withXml {
+                def root = asNode()
+
+                root.dependencies?.each {
+                    root.remove(it)
+                }
+            }
         }
     }
     repositories {
         maven {
-            url "file:///SERVER//Maven"
+            url System.env.MAVEN_URL
         }
     }
 }

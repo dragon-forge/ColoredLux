@@ -46,7 +46,11 @@ void main()
     vec3 lightdark = texture2D(lightmap, gl_TexCoord[1].st).rgb;
     lightdark = clamp(lightdark, 0.0f, 1.0f);
     vec3 lcolor_2 = clamp(lcolor.rgb * intens, 0.0f, 1.0f);
-    if (vanillaTracing == 1) lcolor_2 = lcolor_2 * pow(luma(lightdark), 2);
+    if (vanillaTracing == 1) {
+        float t = luma(lightdark);
+        t *= t;
+        lcolor_2 = lcolor_2 * t;
+    }
 
     if (colMix == 1) lightdark = lightdark + lcolor_2;//More washed-out, but more physically correct
     else lightdark = max(lightdark, lcolor_2);//Vivid but unrealistic

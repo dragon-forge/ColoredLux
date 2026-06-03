@@ -11,20 +11,20 @@ import java.util.List;
 public class LightSegment
 {
 	private GLBuffer lightUBO;
-
+	
 	public final int start, end, size;
 	private final FloatBuffer uboData;
-	private final IGLBufferStream<Float> uboStream;
-
+	private final IGLFloatBufferStream uboStream;
+	
 	public LightSegment(int start, int end)
 	{
 		this.start = start;
 		this.end = end;
 		this.size = end - start;
 		uboData = BufferUtils.createFloatBuffer(size * ColoredLight.FLOAT_SIZE);
-		uboStream = uboData::put;
+		uboStream = IGLFloatBufferStream.forBuffer(uboData);
 	}
-
+	
 	FloatBuffer updateUBO()
 	{
 		List<ColoredLight> lights = ClientLightManager.lights;
@@ -34,13 +34,13 @@ public class LightSegment
 		uboData.flip();
 		return uboData;
 	}
-
+	
 	public GLBuffer getUBO()
 	{
 		createUBO();
 		return lightUBO;
 	}
-
+	
 	void createUBO()
 	{
 		if(lightUBO != null)
@@ -49,10 +49,12 @@ public class LightSegment
 		lightUBO.bufferData(updateUBO());
 		GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, 0);
 	}
-
-	void refreshUBO()
+	
+	int refreshUBO()
 	{
 		createUBO();
-		lightUBO.bufferData(updateUBO());
+		FloatBuffer fb = updateUBO();
+		lightUBO.bufferData(fb);
+		return fb.remaining();
 	}
 }

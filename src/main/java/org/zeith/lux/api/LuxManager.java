@@ -80,7 +80,7 @@ public class LuxManager
 		
 		if(BLOCK_LUMINANCES.containsKey(state.getBlock()))
 		{
-			GatherLightsEvent e = ClientLightManager.newEvent(lights, partialTicks);
+			GatherLightsEvent e = ClientLightManager.gatherLightsEvent(world, lights, partialTicks);
 			BLOCK_LUMINANCES.get(state.getBlock()).createLights(world, pos, state, e);
 		}
 		

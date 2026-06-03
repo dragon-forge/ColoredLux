@@ -9,7 +9,8 @@ import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiVideoSettings;
 import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.*;
+import net.minecraft.client.renderer.chunk.RenderChunk;
 import net.minecraft.client.settings.GameSettings.Options;
 import net.minecraft.entity.*;
 import net.minecraft.entity.player.EntityPlayer;
@@ -27,11 +28,12 @@ import net.minecraftforge.fml.common.gameevent.TickEvent.*;
 import net.minecraftforge.fml.common.registry.*;
 import net.minecraftforge.fml.common.thread.SidedThreadGroups;
 import net.minecraftforge.fml.relauncher.*;
-import org.lwjgl.opengl.*;
+import org.lwjgl.opengl.GL11;
 import org.zeith.lux.*;
 import org.zeith.lux.api.*;
 import org.zeith.lux.api.event.CalculateFogIntensityEvent;
 import org.zeith.lux.api.light.*;
+import org.zeith.lux.api.renderchunk.IRenderChunkWithAlpha;
 import org.zeith.lux.client.*;
 import org.zeith.lux.client.commands.CommandLux;
 import org.zeith.lux.client.json.*;
@@ -47,7 +49,6 @@ import java.util.function.IntSupplier;
 public class ClientProxy
 		extends CommonProxy
 {
-	public static final BUD BLOCK_UPDATE_DETECTOR = new BUD();
 	public static final Map<BlockPos, ILightBlockHandler.LightBlockWrapper> EXISTING = Collections.synchronizedMap(new HashMap<>());
 	public static final Map<Integer, ILightEntityHandler.Wrapper> EXISTING_ENTS = Collections.synchronizedMap(new HashMap<>());
 	public static VariableShaderProgram terrainProgram;
@@ -93,9 +94,8 @@ public class ClientProxy
 		MinecraftForge.EVENT_BUS.register(this);
 		ColoredLightManager.UNIFORM_LIGHT_COUNT = UNIF_LIGHTS;
 		
-		ColoredLux.LOG.info(
-				"Found " + runtimeCores + " available processing threads. The light update frequency will be max(FPS/" +
-						lightTPSDivisor + ", 1) Hz");
+		ColoredLux.LOG.info("Found {} available processing threads. The light update frequency will be {} Hz", runtimeCores, 4F / lightTPSDivisor);
+		searchTimer = new ThreadTimer(4F / lightTPSDivisor);
 		
 		customOptions.add(LUX_ENABLE_LIGHTING);
 		customOptions.add(LUX_PACKS);
@@ -142,46 +142,47 @@ public class ClientProxy
 		LuxPackRepository.getInstance().setup(new File(cfg, "luxpacks.json"));
 		
 		ColoredLightManager.registerOperator(() -> ConfigCL.enableColoredLighting, () ->
-		{
-			if(ConfigCL.enableColoredLighting)
-			{
-				ClientLightManager.uploadLightsUBO();
-				return true;
-			}
-			return false;
-		}, () ->
-		{
-			if(ConfigCL.enableColoredLighting)
-			{
-				ClientProxy.terrainProgram.bindShader();
-				return true;
-			}
-			return false;
-		}, () ->
-		{
-			if(ConfigCL.enableColoredLighting)
-			{
-				ClientProxy.entityProgram.bindShader();
-				return true;
-			}
-			return false;
-		}, () ->
-		{
-			if(ConfigCL.enableColoredLighting)
-			{
-				ClientProxy.terrainProgram.unbindShader();
-				return true;
-			}
-			return false;
-		}, () ->
-		{
-			if(ConfigCL.enableColoredLighting)
-			{
-				ClientProxy.entityProgram.unbindShader();
-				return true;
-			}
-			return false;
-		});
+				{
+					if(ConfigCL.enableColoredLighting)
+					{
+						ClientLightManager.uploadLightsUBO();
+						return true;
+					}
+					return false;
+				}, () ->
+				{
+					if(ConfigCL.enableColoredLighting)
+					{
+						ClientProxy.terrainProgram.bindShader();
+						return true;
+					}
+					return false;
+				}, () ->
+				{
+					if(ConfigCL.enableColoredLighting)
+					{
+						ClientProxy.entityProgram.bindShader();
+						return true;
+					}
+					return false;
+				}, () ->
+				{
+					if(ConfigCL.enableColoredLighting)
+					{
+						ClientProxy.terrainProgram.unbindShader();
+						return true;
+					}
+					return false;
+				}, () ->
+				{
+					if(ConfigCL.enableColoredLighting)
+					{
+						ClientProxy.entityProgram.unbindShader();
+						return true;
+					}
+					return false;
+				}
+		);
 		
 		ClientCommandHandler.instance.registerCommand(new CommandLux());
 		
@@ -203,10 +204,11 @@ public class ClientProxy
 				.onCompilationFailed(prog ->
 				{
 					ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true)
-							.set(ConfigCL.enableColoredLighting = false);
+					             .set(ConfigCL.enableColoredLighting = false);
 					ConfigCL.cfgs.save();
 				})
 				.doGLLog(false)
+				.onBind(vs -> vs.setUniform("chunkAlpha", 1F))
 				.subscribe4Events();
 		
 		ClientProxy.entityProgram = new VariableShaderProgram()
@@ -218,7 +220,7 @@ public class ClientProxy
 				.onCompilationFailed(prog ->
 				{
 					ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true)
-							.set(ConfigCL.enableColoredLighting = false);
+					             .set(ConfigCL.enableColoredLighting = false);
 					ConfigCL.cfgs.save();
 				})
 				.doGLLog(false)
@@ -269,8 +271,9 @@ public class ClientProxy
 		}
 	}
 	
-	public static ThreadTimer searchTimer = new ThreadTimer(0.25F);
+	public static ThreadTimer searchTimer;
 	public static long luxCalcTimeMS;
+	public static boolean enqueuedLightCheck;
 	
 	public void startThread()
 	{
@@ -286,11 +289,12 @@ public class ClientProxy
 			while(ct == thread && !ct.isInterrupted())
 			{
 				searchTimer.advanceTime();
-				if(firstTick || searchTimer.ticks > 0) try
+				if(firstTick || searchTimer.ticks > 0 || enqueuedLightCheck) try
 				{
 					long start = System.nanoTime();
 					areaSearch();
 					luxCalcTimeMS = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+					enqueuedLightCheck = false;
 				} catch(Throwable error)
 				{
 					// Continue running
@@ -307,12 +311,16 @@ public class ClientProxy
 				WorldClient w = Minecraft.getMinecraft().world;
 				if(w != null)
 					firstTick = false;
+				else
+					break;
 			}
 			EXISTING.clear();
 			EXISTING_ENTS.clear();
 			ColoredLux.LOG.info("Stop search thread.");
 		});
 		thread.setName("ColoredLuxLightSearch");
+		thread.setPriority(Thread.MIN_PRIORITY);
+		thread.setDaemon(true);
 		thread.start();
 	}
 	
@@ -340,17 +348,7 @@ public class ClientProxy
 			int r = maxDistance / 2;
 			
 			for(BlockPos.MutableBlockPos pos : BlockPos.getAllInBoxMutable(playerPos.add(-r, -r, -r), playerPos.add(r, r, r)))
-			{
-				IBlockState state = reader.getBlockState(pos);
-				ILightBlockHandler handler = LuxManager.BLOCK_LUMINANCES.get(state.getBlock());
-				if(handler != null)
-				{
-					BlockPos ipos = pos.toImmutable();
-					state = state.getBlock().getExtendedState(state, reader, pos);
-					EXISTING.put(ipos, new ILightBlockHandler.LightBlockWrapper(worldRef, ipos, state, handler));
-				} else
-					EXISTING.remove(pos);
-			}
+				scanSpot(reader, worldRef, pos);
 			
 			Iterator<Integer> iter = EXISTING_ENTS.keySet().iterator();
 			while(iter.hasNext())
@@ -375,6 +373,19 @@ public class ClientProxy
 				}
 			}
 		}
+	}
+	
+	public static void scanSpot(World world, WeakReference<World> worldRef, BlockPos pos)
+	{
+		IBlockState state = world.getBlockState(pos);
+		ILightBlockHandler handler = LuxManager.BLOCK_LUMINANCES.get(state.getBlock());
+		if(handler != null)
+		{
+			BlockPos ipos = pos.toImmutable();
+			state = state.getBlock().getExtendedState(state, world, pos);
+			EXISTING.put(ipos, new ILightBlockHandler.LightBlockWrapper(worldRef != null ? worldRef : new WeakReference<>(world), ipos, state, handler));
+		} else
+			EXISTING.remove(pos);
 	}
 	
 	@Override
@@ -474,15 +485,15 @@ public class ClientProxy
 						if(thread == null || !thread.isAlive())
 							startThread();
 						ClientLightManager.update(Minecraft.getMinecraft().world);
-						GL20.glUseProgram(0);
+						OpenGlHelper.glUseProgram(0);
 						MinecraftForge.EVENT_BUS.post(new LightUniformEvent(ClientLightManager.lights));
 						terrainProgram.bindShader();
-						ClientLightManager.uploadLightsUBO();
+						ClientLightManager.uploadLightsUBO(terrainProgram);
 						entityProgram.bindShader();
 //						entityProgram.setUniform("ticks", ticks + Minecraft.getMinecraft().getRenderPartialTicks());
 						entityProgram.setUniform("sampler", 0);
 						entityProgram.setUniform("lightmap", 1);
-						ClientLightManager.uploadLightsUBO();
+						ClientLightManager.uploadLightsUBO(entityProgram);
 //						entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
 						entityProgram.setUniform("worldTint", wtR, wtG, wtB);
 						entityProgram.setUniform("worldTintIntensity", wtInt);
@@ -547,11 +558,11 @@ public class ClientProxy
 				case "outline":
 				case "aboveClouds":
 				case "destroyProgress":
-					GL20.glUseProgram(0);
+					OpenGlHelper.glUseProgram(0);
 					break;
 				case "gui":
 					isGui = true;
-					GL20.glUseProgram(0);
+					OpenGlHelper.glUseProgram(0);
 					break;
 			}
 		}
@@ -563,20 +574,25 @@ public class ClientProxy
 		return fogIntensity;
 	}
 	
+	protected WeakReference<WorldClient> worldReference = new WeakReference<>(null);
+	
 	@SubscribeEvent
 	public void clientTick(ClientTickEvent e)
 	{
 		if(e.phase != Phase.START) return;
 		
 		WorldClient wc = Minecraft.getMinecraft().world;
-		if(wc != null)
+		WorldClient cachedRef = worldReference.get();
+		
+		if(wc != cachedRef)
 		{
-			if(!wc.eventListeners.contains(BLOCK_UPDATE_DETECTOR))
-				wc.eventListeners.add(BLOCK_UPDATE_DETECTOR);
-		} else
-		{
-			thread = null;
+			worldReference = new WeakReference<>(wc);
+			if(wc == null)
+				thread = null;
+			else if(wc.eventListeners.stream().noneMatch(BUD.class::isInstance))
+				wc.addEventListener(new BUD(wc));
 		}
+		
 	}
 	
 	@SubscribeEvent
@@ -585,7 +601,7 @@ public class ClientProxy
 		if(ConfigCL.enableColoredLighting)
 		{
 			if(LuxManager.blocksShader(e.getEntity()))
-				GL20.glUseProgram(0);
+				OpenGlHelper.glUseProgram(0);
 			else if(section.equalsIgnoreCase("entities") || section.equalsIgnoreCase("blockEntities"))
 				entityProgram.bindShader();
 			if(entityProgram.isActive())
@@ -610,13 +626,17 @@ public class ClientProxy
 		if(ConfigCL.enableColoredLighting)
 		{
 			if(LuxManager.blocksShader(e.getTile()))
-				GL20.glUseProgram(0);
+				OpenGlHelper.glUseProgram(0);
 			else if(section.equalsIgnoreCase("entities") || section.equalsIgnoreCase("blockEntities"))
 				entityProgram.bindShader();
 			if(entityProgram.isActive())
 			{
-				entityProgram.setUniform("entityPos", (float) e.getTile().getPos().getX(), (float) e.getTile().getPos()
-						.getY(), (float) e.getTile().getPos().getZ());
+				BlockPos pos = e.getTile().getPos();
+				entityProgram.setUniform("entityPos",
+						(float) pos.getX(),
+						(float) pos.getY(),
+						(float) pos.getZ()
+				);
 				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
 			}
 		}
@@ -627,10 +647,15 @@ public class ClientProxy
 	{
 		if(ConfigCL.enableColoredLighting && terrainProgram.isActive())
 		{
-			BlockPos pos = e.getRenderChunk().getPosition();
+			RenderChunk rc = e.getRenderChunk();
+			BlockPos pos = rc.getPosition();
 			terrainProgram.setUniform("chunkX", pos.getX());
 			terrainProgram.setUniform("chunkY", pos.getY());
 			terrainProgram.setUniform("chunkZ", pos.getZ());
+			
+			GlStateManager.enableBlend();
+			if(rc instanceof IRenderChunkWithAlpha) terrainProgram.setUniform("chunkAlpha", ((IRenderChunkWithAlpha) rc).getRenderChunkAlpha());
+			else terrainProgram.setUniform("chunkAlpha", 1F);
 		}
 	}
 	
@@ -641,7 +666,7 @@ public class ClientProxy
 		if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
 		{
 			GlStateManager.disableLighting();
-			GL20.glUseProgram(0);
+			OpenGlHelper.glUseProgram(0);
 		}
 		
 		World wld = Minecraft.getMinecraft().world;
@@ -670,11 +695,15 @@ public class ClientProxy
 	{
 		if(renderF3)
 		{
-			String s = "[" + TextFormatting.GREEN + "Lux" + TextFormatting.RESET + "] " +
-					(ConfigCL.enableColoredLighting ? ("L: " + ClientLightManager.debugCulledLights + "/" +
-							ClientLightManager.debugLights + "@" + (ConfigCL.maxLights) + " | ~" + luxCalcTimeMS + "ms")
-													: "Colored lighting " + TextFormatting.RED + "disabled" +
-							 TextFormatting.RESET + ".");
+			String s = "[" + TextFormatting.GREEN + "Lux" + TextFormatting.RESET + "] " + (
+					ConfigCL.enableColoredLighting
+					? ("L: " + ClientLightManager.debugCulledLights + "/" + ClientLightManager.debugLights
+					   + "@" + ConfigCL.maxLights
+					   + ", " + ClientLightManager.debugBytesOfData
+					   + " B | ~" + luxCalcTimeMS + "ms"
+					)
+					: ("Colored lighting " + TextFormatting.RED + "disabled" + TextFormatting.RESET + ".")
+			);
 			List<String> left = f3.getLeft();
 			if(left.size() > 5)
 				left.add(5, s);

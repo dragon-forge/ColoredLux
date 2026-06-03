@@ -1,8 +1,8 @@
 package org.zeith.lux.asm.mixins;
 
 import com.zeitheron.hammercore.api.lighting.ColoredLightManager;
+import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraftforge.fml.relauncher.*;
-import org.lwjgl.opengl.GL20;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.*;
 import org.zeith.lux.asm.minmixin.IMixin;
@@ -35,6 +35,6 @@ public class ItemRendererMixin
 	public static void disableLux()
 	{
 		if(ColoredLightManager.isColoredLightActive())
-			GL20.glUseProgram(0);
+			OpenGlHelper.glUseProgram(0);
 	}
 }

@@ -3,6 +3,8 @@ package org.zeith.lux.client;
 import com.zeitheron.hammercore.api.lighting.*;
 import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
 import com.zeitheron.hammercore.client.utils.gl.GLBuffer;
+import com.zeitheron.hammercore.client.utils.gl.shading.VariableShaderProgram;
+import com.zeitheron.hammercore.utils.AABBUtils;
 import com.zeitheron.hammercore.utils.java.itf.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -30,9 +32,10 @@ public class ClientLightManager
 	public static Vec3d cameraPos = Vec3d.ZERO;
 	public static Frustum camera;
 	public static ArrayList<ColoredLight> lights = new ArrayList<>();
-	public static int debugLights, debugCulledLights;
-	public static Comparator<ColoredLight> distComparator = ColoredLightComparator.byDistanceFrom(() -> cameraPos);
-
+	public static int debugLights, debugCulledLights, debugBytesOfData;
+	public static final Comparator<ColoredLight> distComparator = ColoredLightComparator.byDistanceFrom(() -> cameraPos);
+	public static boolean doLightSort = false;
+	
 	public static void uploadLightsUBO()
 	{
 		int shader = GlShaderStack.glsActiveProgram();
@@ -40,7 +43,7 @@ public class ClientLightManager
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "lightCount"), size);
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), ConfigCL.lightAddMode ? 1 : 0);
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "vanillaTracing"), 0);
-
+		
 		int segCount = getSegmentCount();
 		for(int i = 0; i < segCount; ++i)
 		{
@@ -53,23 +56,50 @@ public class ClientLightManager
 			}
 		}
 	}
-
+	
+	public static void uploadLightsUBO(VariableShaderProgram vrs)
+	{
+		Integer shader = vrs.getProgramId();
+		if(shader == null) return;
+		
+		int size = debugCulledLights = Math.min(ConfigCL.maxLights, debugLights = lights.size());
+		vrs.setUniform("lightCount", size);
+		vrs.setUniform("colMix", ConfigCL.lightAddMode ? 1 : 0);
+		vrs.setUniform("vanillaTracing", 0);
+		
+		int segCount = getSegmentCount();
+		for(int i = 0; i < segCount; ++i)
+		{
+			LightSegment seg = getSegment(i);
+			if(seg != null)
+			{
+				GLBuffer glBuffer = seg.getUBO();
+				glUniformBlockBinding(shader, glGetUniformBlockIndex(shader, "lightBuffer" + i), i);
+				glBindBufferBase(glBuffer.bufferKind, i, glBuffer.buffer);
+			}
+		}
+	}
+	
 	private static Vec3d getCurrentPosition(Entity entity, float partialTicks)
 	{
-		return new Vec3d(entity.lastTickPosX + (entity.posX - entity.lastTickPosX) * partialTicks, entity.lastTickPosY + (entity.posY - entity.lastTickPosY) * partialTicks, entity.lastTickPosZ + (entity.posZ - entity.lastTickPosZ) * partialTicks);
+		return new Vec3d(
+				entity.lastTickPosX + (entity.posX - entity.lastTickPosX) * partialTicks,
+				entity.lastTickPosY + (entity.posY - entity.lastTickPosY) * partialTicks,
+				entity.lastTickPosZ + (entity.posZ - entity.lastTickPosZ) * partialTicks
+		);
 	}
-
-	public static GatherLightsEvent newEvent(ArrayList<ColoredLight> lights, float partialTicks)
+	
+	public static GatherLightsEvent gatherLightsEvent(World world, ArrayList<ColoredLight> lights, float partialTicks)
 	{
-		return new GatherLightsEvent(lights, ConfigCL.maxRenderDistance, cameraPos, camera, partialTicks);
+		return new GatherLightsEvent(world, lights, ConfigCL.maxRenderDistance, cameraPos, camera, partialTicks);
 	}
-
+	
 	public static void update(World world)
 	{
 		Minecraft mc = Minecraft.getMinecraft();
 		Entity cameraEntity = mc.getRenderViewEntity();
 		float partialTicks = mc.getRenderPartialTicks();
-
+		
 		if(cameraEntity != null)
 		{
 			cameraPos = getCurrentPosition(cameraEntity, partialTicks);
@@ -82,8 +112,8 @@ public class ClientLightManager
 			camera = null;
 			return;
 		}
-
-		GatherLightsEvent event = newEvent(lights, partialTicks);
+		
+		GatherLightsEvent event = gatherLightsEvent(world, lights, partialTicks);
 		try
 		{
 			ColoredLightManager.generate(partialTicks).forEach(event::add);
@@ -94,11 +124,20 @@ public class ClientLightManager
 		ClientProxy.EXISTING.values().forEach(m -> m.addLights(event));
 		ClientProxy.EXISTING_ENTS.values().forEach(m -> m.addLights(event));
 		MinecraftForge.EVENT_BUS.post(event);
-
+		
 		int maxDist = ConfigCL.maxRenderDistance;
-
+		
+		AxisAlignedBB area = new AxisAlignedBB(
+				cameraPos.x - maxDist,
+				cameraPos.y - maxDist,
+				cameraPos.z - maxDist,
+				cameraPos.x + maxDist,
+				cameraPos.y + maxDist,
+				cameraPos.z + maxDist
+		);
+		
 		EntityEntry en;
-		for(Entity e : world.getEntitiesWithinAABB(Entity.class, new AxisAlignedBB(cameraPos.x - maxDist, cameraPos.y - maxDist, cameraPos.z - maxDist, cameraPos.x + maxDist, cameraPos.y + maxDist, cameraPos.z + maxDist)))
+		for(Entity e : world.getEntitiesWithinAABB(Entity.class, area))
 			if((en = EntityRegistry.getEntry(e.getClass())) != null && e.isAddedToWorld())
 			{
 				if(e.isInvisibleToPlayer(mc.player))
@@ -106,42 +145,45 @@ public class ClientLightManager
 				TriConsumer<World, Entity, Consumer<ColoredLight>> consumer = LuxPackAPIv2.CUSTOM_ENTITY_LIGHTS.get(en);
 				if(consumer != null) consumer.accept(world, e, event::add);
 			}
-
+		
 		try
 		{
 			for(TileEntity t : world.loadedTileEntityList)
 			{
-				if(t == null || t.getPos() == null // Man, mods are broken as fuck sometimes...
-					|| Math.sqrt(t.getPos().distanceSqToCenter(cameraPos.x, cameraPos.y, cameraPos.z)) >= ConfigCL.maxRenderDistance)
+				if(t == null || t.getPos() == null) // Man, mods are broken as fuck sometimes...
 					continue;
-
-				if(world.isBlockLoaded(t.getPos()))
+				
+				BlockPos pos = t.getPos();
+				if(!AABBUtils.contains(area, pos))
+					continue;
+				
+				if(world.isBlockLoaded(pos))
 				{
 					QuadConsumer<World, BlockPos, TileEntity, Consumer<ColoredLight>> consumer = LuxPackAPIv2.CUSTOM_TILE_LIGHTS.get(t.getClass());
-					if(consumer != null) consumer.accept(world, t.getPos(), t, event::add);
+					if(consumer != null) consumer.accept(world, pos, t, event::add);
 				}
 			}
 		} catch(ConcurrentModificationException ignored)
 		{
 			// might cause flickering, don't care.
 		}
-
-		lights.sort(distComparator);
-
+		
+		if(doLightSort)
+			lights.sort(distComparator);
+		
+		int bytes = 0;
 		int segCount = getSegmentCount();
 		for(int i = 0; i < segCount; ++i)
 		{
 			LightSegment s = getSegment(i);
-			if(s != null) s.refreshUBO();
+			if(s != null) bytes += s.refreshUBO();
 		}
-
-//		if(segment == null) segment = new LightSegment(0, 2048);
-//		segment.refreshUBO();
+		debugBytesOfData = bytes * 4;
 	}
-
+	
 	public static LightSegment segment;
 	public static final List<LightSegment> lightSegments = new ArrayList<>();
-
+	
 	public static int getSegmentCount()
 	{
 		int lps = GL11.glGetInteger(GL31.GL_MAX_UNIFORM_BLOCK_SIZE) / ColoredLight.FLOAT_SIZE / 4;
@@ -157,13 +199,13 @@ public class ClientLightManager
 		
 		return segments;
 	}
-
+	
 	public static LightSegment getSegment(int i)
 	{
 		if(i >= 0 && i < lightSegments.size()) return lightSegments.get(i);
 		return null;
 	}
-
+	
 	public static void clear()
 	{
 		lights.clear();

@@ -1,6 +1,7 @@
 package org.zeith.lux;
 
 import com.zeitheron.hammercore.HammerCore;
+import com.zeitheron.hammercore.utils.CommonMessages;
 import net.minecraftforge.fml.common.*;
 import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.*;
@@ -22,6 +23,13 @@ public class ColoredLux
 	
 	@SidedProxy(serverSide = "org.zeith.lux.proxy.CommonProxy", clientSide = "org.zeith.lux.proxy.ClientProxy")
 	public static CommonProxy proxy;
+	
+	public ColoredLux()
+	{
+		CommonMessages.checkModSource(ColoredLux.class,
+				LOG, "ColoredLux", "https://modrinth.com/mod/colored-lux"
+		);
+	}
 	
 	@EventHandler
 	public void fingerprintViolated(FMLFingerprintViolationEvent e)
