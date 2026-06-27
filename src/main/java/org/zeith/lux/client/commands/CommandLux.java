@@ -51,6 +51,9 @@ public class CommandLux
 				ClientProxy.EXISTING_ENTS.clear();
 				sender.sendMessage(new TextComponentString("Reloading shaders"));
 				IResourceManager res = Minecraft.getMinecraft().getResourceManager();
+				ClientProxy.terrainProgram.prepareReload(res);
+				ClientProxy.entityProgram.prepareReload(res);
+				
 				ClientProxy.terrainProgram.onReload(res);
 				ClientProxy.entityProgram.onReload(res);
 				sender.sendMessage(new TextComponentString("Reloading lux manager"));

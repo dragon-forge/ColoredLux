@@ -33,7 +33,7 @@ import org.lwjgl.opengl.GL11;
 import org.zeith.lux.*;
 import org.zeith.lux.api.*;
 import org.zeith.lux.api.event.CalculateFogIntensityEvent;
-import org.zeith.lux.api.glsl.ShaderLightComputeVariable;
+import org.zeith.lux.api.glsl.*;
 import org.zeith.lux.api.light.*;
 import org.zeith.lux.api.renderchunk.IRenderChunkWithAlpha;
 import org.zeith.lux.client.*;
@@ -201,6 +201,7 @@ public class ClientProxy
 				.id(new ResourceLocation("lux", "terrain"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
 				.addVariable(new ShaderLightComputeVariable("computeColor", "Light", "lightCount", "lcolor", false, "intens"))
+				.addVariable(new ShaderMixLightVariable("mixLights"))
 				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", shaders + "terrain.vsh")))
 				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", shaders + "terrain.fsh")))
 				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE.andThen(p -> ConfigCL.disableLighting()))
@@ -212,6 +213,7 @@ public class ClientProxy
 				.id(new ResourceLocation("lux", "entity"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
 				.addVariable(new ShaderLightComputeVariable("computeColor", "Light", "lightCount", "lcolor", false, "intens"))
+				.addVariable(new ShaderMixLightVariable("mixLights"))
 				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", shaders + "entities.vsh")))
 				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", shaders + "entities.fsh")))
 				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE.andThen(p -> ConfigCL.disableLighting()))

@@ -18,6 +18,8 @@ uniform float fogIntensity;
 
 uniform float chunkAlpha;
 
+#variable mixLights
+
 float luma(vec3 color)
 {
     return dot(color, vec3(0.299f, 0.587f, 0.114f));
@@ -41,30 +43,20 @@ vec3 hsv2rgb(vec3 c)
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0f, 1.0f), c.y);
 }
 
-float distSq(vec3 a, vec3 b)
-{
-    return pow(a.x - b.x, 2) + pow(a.y - b.y, 2) + pow(a.z - b.z, 2);
-}
-
 void main()
 {
-    vec3 lightdark = texture2D(lightmap, gl_TexCoord[1].st).rgb;
-    lightdark = clamp(lightdark, 0.0f, 1.0f);
-    vec3 lcolor_2 = clamp(lcolor * intens, 0.0f, 1.0f);
-    if (vanillaTracing == 1) {
-        float t = luma(lightdark);
-        t *= t;
-        lcolor_2 = lcolor_2 * t;
-    }
+    vec3 mcLight = texture2D(lightmap, gl_TexCoord[1].st).rgb;
+    vec3 luxLight = clamp(lcolor * intens, 0.0f, 1.0f);
 
-    if (colMix == 1) lightdark = lightdark + lcolor_2; // More washed-out, but more physically correct
-    else lightdark = max(lightdark, lcolor_2); // Vivid but unrealistic
+    if (vanillaTracing == 1) {
+        float t = luma(mcLight);
+        t *= t;
+        luxLight = luxLight * t;
+    }
 
     vec4 baseColor = gl_Color * texture2D(albedo, gl_TexCoord[0].st);
     baseColor = baseColor * vec4(mix(vec3(1.0f), worldTint, worldTintIntensity), 1.0f);
-
-    baseColor = baseColor * vec4(lightdark, 1.0f);
-    vec3 dv = position - playerPos;
+    baseColor = baseColor * vec4(mixLights(colMix, mcLight, luxLight), 1.0f);
 
     float dist = max(dist2Obj - gl_Fog.start, 0.0f) / (gl_Fog.end - gl_Fog.start);
     float fog = gl_Fog.density * dist * fogIntensity;

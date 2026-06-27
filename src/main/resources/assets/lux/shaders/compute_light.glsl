@@ -28,6 +28,8 @@ void computeColor(vec3 position, vec3 norm) {
         accum /= total;
     }
 
+    accum *= ACCUM_MULTIPLIER;
+
     LIGHT_COLOR = vec4(accum, 1.0);
     LIGHT_INTENSITY = min(1.0, maxI);
 }
@@ -49,6 +51,8 @@ void computeColor(vec3 position) {
     if (total > 0.0) {
         accum /= total;
     }
+
+    accum *= ACCUM_MULTIPLIER;
 
     LIGHT_COLOR = vec4(accum, 1.0);
     LIGHT_INTENSITY = min(1.0, maxI);
@@ -80,6 +84,7 @@ void computeColor_legacy(vec3 position) {
     }
 
     vec3 accum = max(vec3(sumR, sumG, sumB), 0.0);
+    accum *= ACCUM_MULTIPLIER;
 
     LIGHT_COLOR = vec4(accum, 1.0);
     LIGHT_INTENSITY = min(1.0, maxIntens);
