@@ -1,7 +1,7 @@
 #version 120
 
 varying float intens;
-varying vec4 lcolor;
+varying vec3 lcolor;
 varying float dist2Obj;
 varying vec3 Normal;
 
@@ -9,12 +9,13 @@ uniform vec3 worldTint;
 uniform float worldTintIntensity;
 uniform float saturation;
 
-uniform sampler2D sampler;
+uniform sampler2D albedo;
 uniform sampler2D lightmap;
 uniform vec4 colorMult;
 uniform int vanillaTracing;
 uniform int colMix;
 uniform float fogIntensity;
+uniform float entityAlpha;
 
 const vec3 NormalLightDir = normalize(vec3(0.5f, 1.0f, 0.5f));
 
@@ -45,17 +46,17 @@ void main()
 {
     vec3 lightdark = texture2D(lightmap, gl_TexCoord[1].st).rgb;
     lightdark = clamp(lightdark, 0.0f, 1.0f);
-    vec3 lcolor_2 = clamp(lcolor.rgb * intens, 0.0f, 1.0f);
+    vec3 lcolor_2 = clamp(lcolor * intens, 0.0f, 1.0f);
     if (vanillaTracing == 1) {
         float t = luma(lightdark);
         t *= t;
         lcolor_2 = lcolor_2 * t;
     }
 
-    if (colMix == 1) lightdark = lightdark + lcolor_2;//More washed-out, but more physically correct
-    else lightdark = max(lightdark, lcolor_2);//Vivid but unrealistic
+    if (colMix == 1) lightdark = lightdark + lcolor_2; // More washed-out, but more physically correct
+    else lightdark = max(lightdark, lcolor_2); // Vivid but unrealistic
 
-    vec4 baseColor = gl_Color * texture2D(sampler, gl_TexCoord[0].st);
+    vec4 baseColor = gl_Color * texture2D(albedo, gl_TexCoord[0].st);
     baseColor = baseColor * vec4(mix(vec3(1.0f), worldTint, worldTintIntensity), 1.0f);
 
     baseColor = baseColor * vec4(lightdark, 1.0f);
@@ -74,5 +75,5 @@ void main()
     float brightessInfluence = mix(0.5f, 0.1f, intens);
     float brightness = clamp((1.0f - brightessInfluence) + max(dot(normalize(Normal), NormalLightDir), 0.0f) * brightessInfluence, 0.5f, 1.0f);
 
-    gl_FragColor = vec4(hsv2rgb(hsv) * brightness, baseColor.a);
+    gl_FragColor = vec4(hsv2rgb(hsv) * brightness, baseColor.a * entityAlpha);
 }

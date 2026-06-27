@@ -94,8 +94,12 @@ public class ClientLightManager
 		return new GatherLightsEvent(world, lights, ConfigCL.maxRenderDistance, cameraPos, camera, partialTicks);
 	}
 	
-	public static void update(World world)
+	public static void gatherLights(World world)
 	{
+		lights.clear();
+		
+		if(world == null) return;
+		
 		Minecraft mc = Minecraft.getMinecraft();
 		Entity cameraEntity = mc.getRenderViewEntity();
 		float partialTicks = mc.getRenderPartialTicks();
@@ -204,10 +208,5 @@ public class ClientLightManager
 	{
 		if(i >= 0 && i < lightSegments.size()) return lightSegments.get(i);
 		return null;
-	}
-	
-	public static void clear()
-	{
-		lights.clear();
 	}
 }

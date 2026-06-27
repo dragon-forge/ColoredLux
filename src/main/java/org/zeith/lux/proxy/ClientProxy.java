@@ -14,6 +14,7 @@ import net.minecraft.client.renderer.chunk.RenderChunk;
 import net.minecraft.client.settings.GameSettings.Options;
 import net.minecraft.entity.*;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.*;
 import net.minecraft.util.text.TextFormatting;
@@ -32,6 +33,7 @@ import org.lwjgl.opengl.GL11;
 import org.zeith.lux.*;
 import org.zeith.lux.api.*;
 import org.zeith.lux.api.event.CalculateFogIntensityEvent;
+import org.zeith.lux.api.glsl.ShaderLightComputeVariable;
 import org.zeith.lux.api.light.*;
 import org.zeith.lux.api.renderchunk.IRenderChunkWithAlpha;
 import org.zeith.lux.client.*;
@@ -60,7 +62,7 @@ public class ClientProxy
 	boolean postedLights = false;
 	boolean precedesEntities = true;
 	float fogIntensity;
-	String section = "";
+	static String section = "";
 	Thread thread;
 	private static int maxSessionLights = 1;
 	public static final IntSupplier UNIF_LIGHTS = () ->
@@ -75,6 +77,7 @@ public class ClientProxy
 	public static final List<Options> customOptions = new ArrayList<>();
 	public static final Options LUX_ENABLE_LIGHTING = EnumHelperClient.addOptions("LUX_ENABLE_LIGHTING", "options.lux:lighting", false, true);
 	public static final Options LUX_ENABLE_FOG = EnumHelperClient.addOptions("LUX_ENABLE_FOG", "options.lux:fog", false, true);
+	public static final Options LUX_REDUCED_REFRESH_RATE = EnumHelperClient.addOptions("LUX_REDUCED_REFRESH_RATE", "options.lux:reduced_refresh_rate", false, true);
 	public static final Options LUX_PACKS = EnumHelperClient.addOptions("LUX_LUXPACKS", "options.lux:packs", false, true);
 	public static final String GPU;
 	
@@ -100,6 +103,7 @@ public class ClientProxy
 		customOptions.add(LUX_ENABLE_LIGHTING);
 		customOptions.add(LUX_PACKS);
 		customOptions.add(LUX_ENABLE_FOG);
+		customOptions.add(LUX_REDUCED_REFRESH_RATE);
 		
 		if(OptifineInstalled) for(Field f : GuiPerformanceSettingsOF.getDeclaredFields())
 			if(Options[].class.isAssignableFrom(f.getType()) && Modifier.isStatic(f.getModifiers())) try
@@ -186,43 +190,32 @@ public class ClientProxy
 		
 		ClientCommandHandler.instance.registerCommand(new CommandLux());
 		
-		HWSupport.EnumShaderVersion shaderVersionEnum = HWSupport.getShaderVersionToLoad(GPU);
-		String shaderVersion = shaderVersionEnum.getId();
-		String shaders = "shaders/" + shaderVersion + "/";
+		String shaders = "shaders/";
 		
 		ColoredLux.LOG.info("----------------- Colored Lux Info -----------------");
-		ColoredLux.LOG.info("Using shaders at: " + shaders);
-		ColoredLux.LOG.info("Vendor compat: " + HWSupport.getCardCompatMessage(GPU));
+		ColoredLux.LOG.info("Using shaders at: {}", shaders);
+		ColoredLux.LOG.info("Vendor compat: {}", HWSupport.getCardCompatMessage(GPU));
 		ColoredLux.LOG.info("----------------------------------------------------");
 		
 		ClientProxy.terrainProgram = new VariableShaderProgram()
 				.id(new ResourceLocation("lux", "terrain"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
-				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", shaders + "terrain.fsh")))
+				.addVariable(new ShaderLightComputeVariable("computeColor", "Light", "lightCount", "lcolor", false, "intens"))
 				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", shaders + "terrain.vsh")))
-				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE)
-				.onCompilationFailed(prog ->
-				{
-					ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true)
-					             .set(ConfigCL.enableColoredLighting = false);
-					ConfigCL.cfgs.save();
-				})
-				.doGLLog(false)
+				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", shaders + "terrain.fsh")))
+				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE.andThen(p -> ConfigCL.disableLighting()))
 				.onBind(vs -> vs.setUniform("chunkAlpha", 1F))
+				.doGLLog(false)
 				.subscribe4Events();
 		
 		ClientProxy.entityProgram = new VariableShaderProgram()
 				.id(new ResourceLocation("lux", "entity"))
 				.addVariable(new ShaderLightingVariable("getLight", "Light"))
-				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", shaders + "entities.fsh")))
+				.addVariable(new ShaderLightComputeVariable("computeColor", "Light", "lightCount", "lcolor", false, "intens"))
 				.linkVertexSource(new ShaderSource(new ResourceLocation("lux", shaders + "entities.vsh")))
-				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE)
-				.onCompilationFailed(prog ->
-				{
-					ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true)
-					             .set(ConfigCL.enableColoredLighting = false);
-					ConfigCL.cfgs.save();
-				})
+				.linkFragmentSource(new ShaderSource(new ResourceLocation("lux", shaders + "entities.fsh")))
+				.onCompilationFailed(VariableShaderProgram.ToastCompilationErrorHandler.INSTANCE.andThen(p -> ConfigCL.disableLighting()))
+				.onBind(vs -> vs.setUniform("entityAlpha", 1F))
 				.doGLLog(false)
 				.subscribe4Events();
 		
@@ -445,126 +438,131 @@ public class ClientProxy
 	public void onProfilerChange(ProfilerEndStartEvent event)
 	{
 		section = event.getSection();
-		if(ConfigCL.enableColoredLighting)
+		if(!ConfigCL.enableColoredLighting) return;
+		
+		switch(event.getSection())
 		{
-			EntityPlayer player = Minecraft.getMinecraft().player;
-			
-			switch(event.getSection())
+			case "terrain":
 			{
-				case "terrain":
-				{
-					float pt = Minecraft.getMinecraft().getRenderPartialTicks();
-					
-					float playerX = 0, playerY = 0, playerZ = 0;
-					
-					if(player != null)
-					{
-						playerX = (float) (player.prevPosX + (player.posX - player.prevPosX) * pt);
-						playerY = (float) (player.prevPosZ + (player.posY - player.prevPosY) * pt);
-						playerZ = (float) (player.prevPosZ + (player.posZ - player.prevPosZ) * pt);
-					}
-					
-					isGui = false;
-					precedesEntities = true;
-					terrainProgram.bindShader();
+//				float pt = mc.getRenderPartialTicks();
+
+//				float playerX = 0, playerY = 0, playerZ = 0;
+//
+//				if(player != null)
+//				{
+//					playerX = (float) (player.prevPosX + (player.posX - player.prevPosX) * pt);
+//					playerY = (float) (player.prevPosZ + (player.posY - player.prevPosY) * pt);
+//					playerZ = (float) (player.prevPosZ + (player.posZ - player.prevPosZ) * pt);
+//				}
+				
+				isGui = false;
+				precedesEntities = true;
+				terrainProgram.bindShader();
 //					terrainProgram.setUniform("ticks", ticks + pt);
-					terrainProgram.setUniform("sampler", 0);
-					terrainProgram.setUniform("lightmap", 1);
+				terrainProgram.setUniform("albedo", 0);
+				terrainProgram.setUniform("lightmap", 1);
 //					terrainProgram.setUniform("playerPos", playerX, playerY, playerZ);
-					
-					float wtR = WorldTintHandler.tintRed, wtG = WorldTintHandler.tintGreen, wtB = WorldTintHandler.tintBlue, wtInt = WorldTintHandler.tintIntensity;
-					float saturation = WorldTintHandler.saturation;
-					
-					terrainProgram.setUniform("worldTint", wtR, wtG, wtB);
-					terrainProgram.setUniform("worldTintIntensity", wtInt);
-					terrainProgram.setUniform("saturation", saturation);
-					terrainProgram.setUniform("fogIntensity", fogIntensity);
-					
-					if(!postedLights)
-					{
-						if(thread == null || !thread.isAlive())
-							startThread();
-						ClientLightManager.update(Minecraft.getMinecraft().world);
-						OpenGlHelper.glUseProgram(0);
-						MinecraftForge.EVENT_BUS.post(new LightUniformEvent(ClientLightManager.lights));
-						terrainProgram.bindShader();
-						ClientLightManager.uploadLightsUBO(terrainProgram);
-						entityProgram.bindShader();
+				
+				float wtR = WorldTintHandler.tintRed, wtG = WorldTintHandler.tintGreen, wtB = WorldTintHandler.tintBlue, wtInt = WorldTintHandler.tintIntensity;
+				float saturation = WorldTintHandler.saturation;
+				
+				terrainProgram.setUniform("worldTint", wtR, wtG, wtB);
+				terrainProgram.setUniform("worldTintIntensity", wtInt);
+				terrainProgram.setUniform("saturation", saturation);
+				terrainProgram.setUniform("fogIntensity", fogIntensity);
+				
+				if(!postedLights)
+				{
+					if(thread == null || !thread.isAlive())
+						startThread();
+					if(!ConfigCL.reducedRefreshRate)
+						ClientLightManager.gatherLights(Minecraft.getMinecraft().world);
+					OpenGlHelper.glUseProgram(0);
+					MinecraftForge.EVENT_BUS.post(new LightUniformEvent(ClientLightManager.lights));
+					terrainProgram.bindShader();
+					ClientLightManager.uploadLightsUBO(terrainProgram);
+					entityProgram.bindShader();
 //						entityProgram.setUniform("ticks", ticks + Minecraft.getMinecraft().getRenderPartialTicks());
-						entityProgram.setUniform("sampler", 0);
-						entityProgram.setUniform("lightmap", 1);
-						ClientLightManager.uploadLightsUBO(entityProgram);
+					entityProgram.setUniform("albedo", 0);
+					entityProgram.setUniform("lightmap", 1);
+					ClientLightManager.uploadLightsUBO(entityProgram);
 //						entityProgram.setUniform("playerPos", playerX, playerY, playerZ);
-						entityProgram.setUniform("worldTint", wtR, wtG, wtB);
-						entityProgram.setUniform("worldTintIntensity", wtInt);
-						entityProgram.setUniform("saturation", saturation);
-						terrainProgram.bindShader();
-						postedLights = true;
-						ClientLightManager.clear();
-					}
-					break;
-				}
-				case "litParticles":
-				{
+					entityProgram.setUniform("worldTint", wtR, wtG, wtB);
+					entityProgram.setUniform("worldTintIntensity", wtInt);
+					entityProgram.setUniform("saturation", saturation);
 					terrainProgram.bindShader();
-					terrainProgram.setUniform("sampler", 0);
-					terrainProgram.setUniform("lightmap", 1);
-//					if(player != null)
-//						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
-					terrainProgram.setUniform("chunkX", 0);
-					terrainProgram.setUniform("chunkY", 0);
-					terrainProgram.setUniform("chunkZ", 0);
-					break;
+					postedLights = true;
 				}
-				case "particles":
-				{
-					entityProgram.bindShader();
-					if(player != null)
-						entityProgram.setUniform("entityPos", (float) player.posX, (float) player.posY, (float) player.posZ);
-					entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
-					break;
-				}
-				case "entities":
-				{
-					if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
-					{
-						entityProgram.bindShader();
-						entityProgram.setUniform("fogIntensity", fogIntensity);
-					}
-					break;
-				}
-				case "blockEntities":
-					if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
-					{
-						entityProgram.bindShader();
-					}
-					break;
-				case "translucent":
-					terrainProgram.bindShader();
-					terrainProgram.setUniform("sampler", 0);
-					terrainProgram.setUniform("lightmap", 1);
-//					if(player != null)
-//						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
-					break;
-				case "hand":
-					entityProgram.bindShader();
-					if(player != null)
-						entityProgram.setUniform("entityPos", (float) player.posX, (float) player.posY, (float) player.posZ);
-					entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
-					precedesEntities = true;
-					break;
-				case "sky":
-				case "weather":
-				case "outline":
-				case "aboveClouds":
-				case "destroyProgress":
-					OpenGlHelper.glUseProgram(0);
-					break;
-				case "gui":
-					isGui = true;
-					OpenGlHelper.glUseProgram(0);
-					break;
+				break;
 			}
+			case "litParticles":
+			{
+				terrainProgram.bindShader();
+				terrainProgram.setUniform("albedo", 0);
+				terrainProgram.setUniform("lightmap", 1);
+//					if(player != null)
+//						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+				terrainProgram.setUniform("chunkX", 0);
+				terrainProgram.setUniform("chunkY", 0);
+				terrainProgram.setUniform("chunkZ", 0);
+				break;
+			}
+			case "particles":
+			{
+				entityProgram.bindShader();
+				Minecraft mc = Minecraft.getMinecraft();
+				EntityPlayer player = mc.player;
+				if(player != null)
+					entityProgram.setUniform("entityPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
+				break;
+			}
+			case "entities":
+			{
+				if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
+				{
+					entityProgram.bindShader();
+					entityProgram.setUniform("fogIntensity", fogIntensity);
+				}
+				break;
+			}
+			case "blockEntities":
+			{
+				if(Minecraft.getMinecraft().isCallingFromMinecraftThread())
+				{
+					entityProgram.bindShader();
+				}
+			}
+			break;
+			case "translucent":
+				terrainProgram.bindShader();
+				terrainProgram.setUniform("albedo", 0);
+				terrainProgram.setUniform("lightmap", 1);
+//					if(player != null)
+//						terrainProgram.setUniform("playerPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+				break;
+			case "hand":
+			{
+				Minecraft mc = Minecraft.getMinecraft();
+				EntityPlayer player = mc.player;
+				entityProgram.bindShader();
+				if(player != null)
+					entityProgram.setUniform("entityPos", (float) player.posX, (float) player.posY, (float) player.posZ);
+				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
+				precedesEntities = true;
+				break;
+			}
+			case "sky":
+			case "weather":
+			case "outline":
+			case "aboveClouds":
+			case "destroyProgress":
+				OpenGlHelper.glUseProgram(0);
+				break;
+			case "gui":
+				isGui = true;
+				OpenGlHelper.glUseProgram(0);
+				break;
 		}
 	}
 	
@@ -593,53 +591,60 @@ public class ClientProxy
 				wc.addEventListener(new BUD(wc));
 		}
 		
+		if(ConfigCL.reducedRefreshRate)
+			ClientLightManager.gatherLights(wc);
 	}
 	
 	@SubscribeEvent
 	public void renderEntity(RenderEntityEvent e)
 	{
-		if(ConfigCL.enableColoredLighting)
+		renderEntity(e.getEntity());
+	}
+	
+	public static void renderEntity(Entity e)
+	{
+		if(!ConfigCL.enableColoredLighting) return;
+		
+		if(LuxManager.blocksShader(e)) OpenGlHelper.glUseProgram(0);
+		else if(section.equalsIgnoreCase("entities") || section.equalsIgnoreCase("blockEntities")) entityProgram.bindShader();
+		
+		if(entityProgram.isActive())
 		{
-			if(LuxManager.blocksShader(e.getEntity()))
-				OpenGlHelper.glUseProgram(0);
-			else if(section.equalsIgnoreCase("entities") || section.equalsIgnoreCase("blockEntities"))
-				entityProgram.bindShader();
-			if(entityProgram.isActive())
+			entityProgram.setUniform("entityPos", (float) e.posX, (float) e.posY + e.height / 2F, (float) e.posZ);
+			
+			boolean setColor = false;
+			
+			if(e instanceof EntityLivingBase)
 			{
-				entityProgram.setUniform("entityPos", (float) e.getEntity().posX,
-						(float) e.getEntity().posY + e.getEntity().height / 2.0f, (float) e.getEntity().posZ
-				);
-				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
-				if(e.getEntity() instanceof EntityLivingBase)
+				EntityLivingBase elb = (EntityLivingBase) e;
+				if(elb.hurtTime > 0 || elb.deathTime > 0)
 				{
-					EntityLivingBase elb = (EntityLivingBase) e.getEntity();
-					if(elb.hurtTime > 0 || elb.deathTime > 0)
-						entityProgram.setUniform("colorMult", 1F, 0F, 0F, 0.35F);
+					entityProgram.setUniform("colorMult", 1F, 0F, 0F, 0.35F);
+					setColor = true;
 				}
 			}
+			
+			if(!setColor)
+				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
 		}
 	}
 	
 	@SubscribeEvent
 	public void renderTileEntity(RenderTileEntityEvent e)
 	{
-		if(ConfigCL.enableColoredLighting)
-		{
-			if(LuxManager.blocksShader(e.getTile()))
-				OpenGlHelper.glUseProgram(0);
-			else if(section.equalsIgnoreCase("entities") || section.equalsIgnoreCase("blockEntities"))
-				entityProgram.bindShader();
-			if(entityProgram.isActive())
-			{
-				BlockPos pos = e.getTile().getPos();
-				entityProgram.setUniform("entityPos",
-						(float) pos.getX(),
-						(float) pos.getY(),
-						(float) pos.getZ()
-				);
-				entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
-			}
-		}
+		if(!ConfigCL.enableColoredLighting) return;
+		
+		TileEntity tile = e.getTile();
+		
+		if(LuxManager.blocksShader(tile)) OpenGlHelper.glUseProgram(0);
+		else if(section.equalsIgnoreCase("entities") || section.equalsIgnoreCase("blockEntities")) entityProgram.bindShader();
+		
+		if(!entityProgram.isActive()) return;
+		
+		BlockPos pos = tile.getPos();
+		entityProgram.setUniform("entityPos", (float) pos.getX(), (float) pos.getY(), (float) pos.getZ());
+		
+		entityProgram.setUniform("colorMult", 1F, 1F, 1F, 0F);
 	}
 	
 	@SubscribeEvent

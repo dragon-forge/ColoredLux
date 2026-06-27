@@ -9,7 +9,7 @@ import org.apache.logging.log4j.*;
 import org.zeith.lux.proxy.CommonProxy;
 
 @Mod(
-		modid = "lux",
+		modid = ColoredLux.MOD_ID,
 		name = "Colored Lux",
 		version = "@VERSION@",
 		certificateFingerprint = "9f5e2a811a8332a842b34f6967b7db0ac4f24856",
@@ -20,6 +20,7 @@ import org.zeith.lux.proxy.CommonProxy;
 public class ColoredLux
 {
 	public static final Logger LOG = LogManager.getLogger("ColoredLux");
+	public static final String MOD_ID = "lux";
 	
 	@SidedProxy(serverSide = "org.zeith.lux.proxy.CommonProxy", clientSide = "org.zeith.lux.proxy.ClientProxy")
 	public static CommonProxy proxy;

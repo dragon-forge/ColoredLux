@@ -98,8 +98,8 @@ public class GatherLightsEvent
 			distSq = (float) distSqd;
 		}
 		
-		if(camera != null && !camera.isBoxInFrustum(light.x - radius, light.y - radius, light.z - radius, light.x + radius, light.y + radius, light.z + radius))
-			return;
+//		if(camera != null && !camera.isBoxInFrustum(light.x - radius, light.y - radius, light.z - radius, light.x + radius, light.y + radius, light.z + radius))
+//			return;
 		
 		// New optimization node: prevents furthest lights from being added when over the limit. (reduce sorting time)
 		if(distSq != null)

@@ -10,16 +10,13 @@ import net.minecraft.util.text.TextFormatting;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.relauncher.Side;
-import net.minecraftforge.fml.relauncher.SideOnly;
+import net.minecraftforge.fml.relauncher.*;
 import org.zeith.lux.ConfigCL;
 import org.zeith.lux.proxy.ClientProxy;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.lang.reflect.*;
+import java.util.*;
+import java.util.regex.Pattern;
 
 @SideOnly(Side.CLIENT)
 @Mod.EventBusSubscriber(Side.CLIENT)
@@ -135,7 +132,8 @@ public class HOOKVideoSettings
 			public void drawButton(Minecraft mc, int mouseX, int mouseY, float partialTicks)
 			{
 				Boolean state = getState(getOption());
-				displayString = I18n.format(getOption().getTranslation()) + (state != null ? (": " + (state ? TextFormatting.DARK_GREEN : TextFormatting.DARK_RED) + I18n.format("options.o" + (state ? "n" : "ff"))) : "") + TextFormatting.RESET;
+				displayString = I18n.format(getOption().getTranslation()) +
+				                (state != null ? (": " + (state ? TextFormatting.DARK_GREEN : TextFormatting.DARK_RED) + I18n.format("options.o" + (state ? "n" : "ff"))) : "") + TextFormatting.RESET;
 				super.drawButton(mc, mouseX, mouseY, partialTicks);
 				if(isMouseOver())
 				{
@@ -183,54 +181,42 @@ public class HOOKVideoSettings
 		}
 	}
 	
+	private static final Pattern OF_FILTER = Pattern.compile("\\{OF}(?<body>.*?)\\{/}", Pattern.DOTALL);
+	
+	private static void formatDescription(String str, List<String> desc)
+	{
+		if(ClientProxy.OptifineInstalled)
+			str = OF_FILTER.matcher(str).replaceAll("${body}");
+		else
+			str = OF_FILTER.matcher(str).replaceAll("");
+		desc.addAll(Arrays.asList(str.split("<br>")));
+	}
+	
 	public static void describe(GameSettings.Options opt, List<String> desc)
 	{
 		if(opt == ClientProxy.LUX_ENABLE_LIGHTING)
-		{
-			String str = I18n.format("options.lux:lighting.desc");
-			while(str.contains("{OF}") && str.contains("{/}"))
-			{
-				int ofi = str.indexOf("{OF}");
-				int ofe = str.indexOf("{/}", ofi);
-				String inner = str.substring(ofi + 4, ofe);
-				if(ClientProxy.OptifineInstalled)
-					str = str.replace("{OF}" + inner + "{/}", inner);
-				else
-					str = str.replace("{OF}" + inner + "{/}", "");
-			}
-			desc.addAll(Arrays.asList(str.split("<br>")));
-		}
-
+			formatDescription(I18n.format("options.lux:lighting.desc"), desc);
+		
 		if(opt == ClientProxy.LUX_ENABLE_FOG)
-		{
-			String str = I18n.format("options.lux:fog.desc");
-			while(str.contains("{OF}") && str.contains("{/}"))
-			{
-				int ofi = str.indexOf("{OF}");
-				int ofe = str.indexOf("{/}", ofi);
-				String inner = str.substring(ofi + 4, ofe);
-				if(ClientProxy.OptifineInstalled)
-					str = str.replace("{OF}" + inner + "{/}", inner);
-				else
-					str = str.replace("{OF}" + inner + "{/}", "");
-			}
-			desc.addAll(Arrays.asList(str.split("<br>")));
-		}
+			formatDescription(I18n.format("options.lux:fog.desc"), desc);
+		
+		if(opt == ClientProxy.LUX_REDUCED_REFRESH_RATE)
+			formatDescription(I18n.format("options.lux:reduced_refresh_rate.desc"), desc);
 		
 		if(opt == ClientProxy.LUX_PACKS)
-		{
-			String str = I18n.format("options.lux:packs.desc");
-			desc.addAll(Arrays.asList(str.split("<br>")));
-		}
+			formatDescription(I18n.format("options.lux:packs.desc"), desc);
 	}
 	
 	public static Boolean getState(GameSettings.Options opt)
 	{
 		if(opt == ClientProxy.LUX_ENABLE_LIGHTING)
 			return ConfigCL.enableColoredLighting;
-
+		
 		if(opt == ClientProxy.LUX_ENABLE_FOG)
 			return ConfigCL.enableFog;
+		
+		if(opt == ClientProxy.LUX_REDUCED_REFRESH_RATE)
+			return ConfigCL.reducedRefreshRate;
 		
 		if(opt == ClientProxy.LUX_PACKS)
 			return null;
@@ -246,11 +232,18 @@ public class HOOKVideoSettings
 			ConfigCL.cfgs.get("Client-Side", "Colored Lighting", true).set(ConfigCL.enableColoredLighting);
 			ConfigCL.cfgs.save();
 		}
-
+		
 		if(opt == ClientProxy.LUX_ENABLE_FOG)
 		{
 			ConfigCL.enableFog = !ConfigCL.enableFog;
 			ConfigCL.cfgs.get("Client-Side", "Enable Fog", true).set(ConfigCL.enableFog);
+			ConfigCL.cfgs.save();
+		}
+		
+		if(opt == ClientProxy.LUX_REDUCED_REFRESH_RATE)
+		{
+			ConfigCL.reducedRefreshRate = !ConfigCL.reducedRefreshRate;
+			ConfigCL.cfgs.get("Client-Side", "Reduced Light Update Frequency", true).set(ConfigCL.reducedRefreshRate);
 			ConfigCL.cfgs.save();
 		}
 		
