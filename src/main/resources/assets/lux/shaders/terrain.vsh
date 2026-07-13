@@ -1,6 +1,5 @@
-#version 150 compatibility
+#version 330 compatibility
 
-out vec3 position;
 out vec3 lcolor;
 out float intens;
 out float dist2Obj;
@@ -23,12 +22,12 @@ uniform int lightCount;
 void main()
 {
 	vec4 pos = gl_ModelViewProjectionMatrix * gl_Vertex;
-	position = gl_Vertex.xyz + vec3(chunkX, chunkY, chunkZ);
+	vec3 position = gl_Vertex.xyz + vec3(chunkX, chunkY, chunkZ);
 	gl_TexCoord[0] = gl_TextureMatrix[0] * gl_MultiTexCoord0;
 	gl_TexCoord[1] = gl_TextureMatrix[1] * gl_MultiTexCoord1;
 	gl_Position = ftransform();
 	gl_FrontColor = gl_Color;
-    dist2Obj = length(gl_Position);
+    dist2Obj = length(gl_Position.xyz);
     lcolor = vec3(0);
 
     computeColor(position);

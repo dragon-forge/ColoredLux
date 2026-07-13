@@ -14,6 +14,6 @@ jei_version=4.11.0.206
 mod_id=lux
 mod_id_fancy=ColoredLux
 mod_name=Colored Lux
-mod_version=12.6.37
+mod_version=12.6.38
 cf_project=347912
 release_type=release

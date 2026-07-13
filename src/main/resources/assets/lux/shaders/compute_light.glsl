@@ -69,7 +69,7 @@ void computeColor_legacy(vec3 position) {
     for (int i = 0; i < LIGHT_COUNT; i++)
     {
         LIGHT_STRUCT l = getLight(i);
-        float intensity = pow(max(0, 1.0f - distance(l.position, position) / l.radius), 2);
+        float intensity = pow(max(0, 1.0 - distance(l.position, position) / l.radius), 2);
         totalIntens += intensity;
         maxIntens = max(maxIntens, intensity);
     }
@@ -77,7 +77,7 @@ void computeColor_legacy(vec3 position) {
     for (int i = 0; i < LIGHT_COUNT; i++)
     {
         LIGHT_STRUCT l = getLight(i);
-        float intensity = pow(max(0, 1.0f - distance(l.position, position) / l.radius), 2);
+        float intensity = pow(max(0, 1.0 - distance(l.position, position) / l.radius), 2);
         sumR += l.color.r * (intensity / totalIntens);
         sumG += l.color.g * (intensity / totalIntens);
         sumB += l.color.b * (intensity / totalIntens);

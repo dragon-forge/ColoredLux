@@ -3,7 +3,7 @@ vec3 mixLights(int colMix, vec3 mcLight, vec3 luxLight) {
 
     switch (colMix) {
         case 2:
-            return dot(mcLight, vec3(0.299f, 0.587f, 0.114f)) * luxLight;
+            return dot(mcLight, vec3(0.299, 0.587, 0.114)) * luxLight;
         case 1:
             return mcLight + luxLight;
         default:
