@@ -1,7 +1,7 @@
 package org.zeith.lux.client;
 
 import com.zeitheron.hammercore.api.lighting.*;
-import com.zeitheron.hammercore.client.render.shader.GlShaderStack;
+import com.zeitheron.hammercore.client.render.shader.*;
 import com.zeitheron.hammercore.client.utils.gl.GLBuffer;
 import com.zeitheron.hammercore.client.utils.gl.shading.VariableShaderProgram;
 import com.zeitheron.hammercore.utils.AABBUtils;
@@ -14,7 +14,7 @@ import net.minecraft.util.math.*;
 import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.registry.*;
-import org.lwjgl.opengl.*;
+import org.lwjgl.opengl.GL20;
 import org.zeith.lux.ConfigCL;
 import org.zeith.lux.api.comparators.ColoredLightComparator;
 import org.zeith.lux.api.event.GatherLightsEvent;
@@ -42,6 +42,7 @@ public class ClientLightManager
 		int size = debugCulledLights = Math.min(ConfigCL.maxLights, debugLights = lights.size());
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "lightCount"), size);
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), ConfigCL.lightAddMode ? 1 : 0);
+//		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "colMix"), 1);
 		GL20.glUniform1i(GL20.glGetUniformLocation(shader, "vanillaTracing"), 0);
 		
 		int segCount = getSegmentCount();
@@ -185,12 +186,11 @@ public class ClientLightManager
 		debugBytesOfData = bytes * 4;
 	}
 	
-	public static LightSegment segment;
 	public static final List<LightSegment> lightSegments = new ArrayList<>();
 	
 	public static int getSegmentCount()
 	{
-		int lps = GL11.glGetInteger(GL31.GL_MAX_UNIFORM_BLOCK_SIZE) / ColoredLight.FLOAT_SIZE / 4;
+		int lps = ShaderLimits.getMaxUniformBlockSize() / ColoredLight.BYTE_SIZE;
 		int segments = Math.max(1, (int) Math.ceil(ClientProxy.UNIF_LIGHTS.getAsInt() / (double) lps));
 		
 		for(int i = 0; i < segments; ++i)

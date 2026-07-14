@@ -26,7 +26,8 @@ public class ConfigCL
 	@ModConfigPropertyInt(name = "Max Lights", category = "Client-Side", defaultValue = 2048, min = 0, max = 131072, comment = "How many lights would the mod render into the world? Lights are sorted nearest-first, so further-away lights will be culled after nearer lights.")
 	public static int maxLights = 131072;
 	
-	@ModConfigPropertyBool(name = "Light Add Mode", category = "Client-Side", defaultValue = true, comment = "Should the light sources add up or max with vanilla lighting?\ntrue: The light sources will add up with minecraft lighting engine. (More washed out, but more realistic)\nfalse: The total light value will be maximal brightness from minecraft and colored (or something inbetween) (Vivid but unrealistic)")
+//	@ModConfigPropertyBool(name = "Light Add Mode", category = "Client-Side", defaultValue = true, comment = "Should the light sources add up or max with vanilla lighting?\ntrue: The light sources will add up with minecraft lighting engine. (More washed out, but more realistic)\nfalse: The total light value will be maximal brightness from minecraft and colored (or something inbetween) (Vivid but unrealistic)")
+	@Deprecated
 	public static boolean lightAddMode = true;
 	
 	@ModConfigPropertyBool(name = "Enable Fog", category = "Client-Side", defaultValue = true, comment = "Should colored lighting engine render fog?\ntrue: The fog will be rendered alongside the colored lighting.\nfalse: No fog should be visible when colored lighting is enabled.")
